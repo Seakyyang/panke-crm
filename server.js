@@ -112,6 +112,9 @@ async function initSchema() {
       note TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    -- 用户审核状态字段：approved(已通过) / pending(待审核) / rejected(已拒绝)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'approved';
+    CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
   `);
 }
 
@@ -299,9 +302,9 @@ async function auth(req, res, next) {
       FROM users u
       LEFT JOIN agents a ON u.agent_id = a.id
       LEFT JOIN stores s ON u.store_id = s.id
-      WHERE u.password_hash = ? AND u.role != 'disabled'
+      WHERE u.password_hash = ? AND u.status = 'approved'
     `, [token]);
-    if (!user) return res.status(401).json({ error: 'Token无效' });
+    if (!user) return res.status(401).json({ error: 'Token无效或账号未审核' });
     req.user = user;
     next();
   } catch (e) {
@@ -330,6 +333,10 @@ app.post('/api/auth/login', async (req, res) => {
       WHERE u.username = ? AND u.password_hash = ?
     `, [username, hash]);
     if (!user) return res.status(401).json({ error: '用户名或密码错误' });
+    // 审核状态检查
+    if (user.status === 'pending') return res.status(403).json({ error: '账号待管理员审核，请稍后再试或联系管理员' });
+    if (user.status === 'rejected') return res.status(403).json({ error: '账号已被拒绝，请联系管理员' });
+    if (user.status === 'disabled') return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
     res.json({
       token: hash,
       role: user.role,
@@ -385,10 +392,10 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const hash = hashPassword(password);
-    await q('INSERT INTO users (username, password_hash, role, agent_id, store_id) VALUES (?,?,?,?,?)',
-      [username, hash, validRole, agentId, storeId]);
+    await q('INSERT INTO users (username, password_hash, role, agent_id, store_id, status) VALUES (?,?,?,?,?,?)',
+      [username, hash, validRole, agentId, storeId, 'pending']);
 
-    res.json({ token: hash, role: validRole, username, message: '注册成功' });
+    res.json({ message: '注册成功，请等待管理员审核后即可登录' });
   } catch (e) {
     console.error('Register error:', e.message);
     res.status(500).json({ error: '服务器错误' });
@@ -403,6 +410,236 @@ app.get('/api/auth/verify', auth, (req, res) => {
     storeName: req.user.store_name,
     storeId: req.user.store_id,
   });
+});
+
+// ==================== API: ADMIN - USER APPROVAL ====================
+// 获取待审核用户列表 (仅 admin)
+app.get('/api/admin/pending-users', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可访问' });
+    const users = await qAll(`
+      SELECT u.id, u.username, u.role, u.status, u.store_id, u.agent_id,
+             a.name as agent_name, s.name as store_name, s.city as store_city,
+             to_char(u.id, '999999999999') as created_hint
+      FROM users u
+      LEFT JOIN agents a ON u.agent_id = a.id
+      LEFT JOIN stores s ON u.store_id = s.id
+      WHERE u.status IN ('pending', 'rejected')
+      ORDER BY u.id DESC
+    `);
+    res.json({ users });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 获取所有用户列表 (仅 admin，用于查看审核状态)
+app.get('/api/admin/users', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可访问' });
+    const users = await qAll(`
+      SELECT u.id, u.username, u.role, u.status,
+             a.name as agent_name, s.name as store_name, s.city as store_city
+      FROM users u
+      LEFT JOIN agents a ON u.agent_id = a.id
+      LEFT JOIN stores s ON u.store_id = s.id
+      ORDER BY u.id DESC
+    `);
+    res.json({ users });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 审核通过 (仅 admin)
+app.post('/api/admin/approve-user', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可访问' });
+    const { user_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: '缺少 user_id' });
+    const result = await q('UPDATE users SET status = ? WHERE id = ? AND status != ?', ['approved', user_id, 'approved']);
+    if (result.rowCount === 0) return res.status(404).json({ error: '用户不存在或已是审核状态' });
+    res.json({ message: '已审核通过' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 审核拒绝 (仅 admin)
+app.post('/api/admin/reject-user', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可访问' });
+    const { user_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: '缺少 user_id' });
+    const result = await q('UPDATE users SET status = ? WHERE id = ?', ['rejected', user_id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: '用户不存在' });
+    res.json({ message: '已拒绝' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 禁用用户 (仅 admin)
+app.post('/api/admin/disable-user', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可访问' });
+    const { user_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: '缺少 user_id' });
+    const result = await q('UPDATE users SET status = ? WHERE id = ? AND role != ?', ['disabled', user_id, 'admin']);
+    if (result.rowCount === 0) return res.status(404).json({ error: '用户不存在或不能禁用管理员' });
+    res.json({ message: '已禁用' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== API: EXPORT (仅 admin) ====================
+// 导出所有客户数据为 CSV
+app.get('/api/export/customers', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可导出数据' });
+
+    const customers = await qAll(`
+      SELECT c.id, c.add_date, c.level, c.customer_name, c.demographic, c.age_range,
+             c.reception_duration, c.channel, c.work_area, c.unit_type, c.budget,
+             c.objection, c.lease_term, c.move_in_time, c.rating, c.discount_info,
+             c.followup_notes, c.reception_notes,
+             a.name as agent_name, s.name as store_name, s.city as store_city,
+             (SELECT COUNT(*)::int FROM follow_ups f WHERE f.customer_id = c.id) as followup_count,
+             to_char(c.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at,
+             to_char(c.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at
+      FROM customers c
+      JOIN agents a ON c.agent_id = a.id
+      JOIN stores s ON c.store_id = s.id
+      ORDER BY c.add_date DESC NULLS LAST, c.id DESC
+    `);
+
+    // CSV 表头
+    const headers = ['ID', '添加日期', '阶段', '客户名称', '运营官', '门店', '城市',
+                     '人口结构', '年龄段', '接待时长', '渠道', '工作区域', '意向户型',
+                     '预算', '抗性', '租期', '入住时间', '评级', '优惠释放',
+                     '跟进次数', '接待情况', '跟进记录', '创建时间', '更新时间'];
+    const fields = ['id', 'add_date', 'level', 'customer_name', 'agent_name', 'store_name', 'store_city',
+                    'demographic', 'age_range', 'reception_duration', 'channel', 'work_area', 'unit_type',
+                    'budget', 'objection', 'lease_term', 'move_in_time', 'rating', 'discount_info',
+                    'followup_count', 'reception_notes', 'followup_notes', 'created_at', 'updated_at'];
+
+    // CSV 转义函数（含逗号、引号、换行的字段需要用双引号包裹，内部双引号转义为两个双引号）
+    function csvEscape(v) {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    // 添加 BOM 让 Excel 正确识别 UTF-8
+    let csv = '\ufeff' + headers.map(csvEscape).join(',') + '\r\n';
+    for (const row of customers) {
+      csv += fields.map(f => csvEscape(row[f])).join(',') + '\r\n';
+    }
+
+    const filename = `customers_${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (e) {
+    console.error('Export error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 导出跟进记录为 CSV (仅 admin)
+app.get('/api/export/followups', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可导出数据' });
+
+    const followups = await qAll(`
+      SELECT f.id, f.customer_id, c.customer_name, a.name as agent_name, s.name as store_name,
+             f.content, f.followup_type, f.next_action,
+             to_char(f.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
+      FROM follow_ups f
+      JOIN customers c ON f.customer_id = c.id
+      LEFT JOIN agents a ON f.agent_id = a.id
+      LEFT JOIN stores s ON a.store_id = s.id
+      ORDER BY f.created_at DESC
+    `);
+
+    const headers = ['ID', '客户ID', '客户名称', '运营官', '门店', '跟进内容', '跟进方式', '下一步动作', '跟进时间'];
+    const fields = ['id', 'customer_id', 'customer_name', 'agent_name', 'store_name', 'content', 'followup_type', 'next_action', 'created_at'];
+
+    function csvEscape(v) {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    let csv = '\ufeff' + headers.map(csvEscape).join(',') + '\r\n';
+    for (const row of followups) {
+      csv += fields.map(f => csvEscape(row[f])).join(',') + '\r\n';
+    }
+
+    const filename = `followups_${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (e) {
+    console.error('Export followups error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 导出门店汇总为 CSV (仅 admin)
+app.get('/api/export/store-summary', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可导出数据' });
+
+    const stores = await qAll(`
+      SELECT s.id, s.name, s.city, s.district,
+        COUNT(c.id)::int as total,
+        COALESCE(SUM(CASE WHEN c.level = 'P1' THEN 1 ELSE 0 END), 0)::int as p1,
+        COALESCE(SUM(CASE WHEN c.level = 'P2' THEN 1 ELSE 0 END), 0)::int as p2,
+        COALESCE(SUM(CASE WHEN c.level = 'P3' THEN 1 ELSE 0 END), 0)::int as p3,
+        COALESCE(SUM(CASE WHEN c.level = 'P4' THEN 1 ELSE 0 END), 0)::int as p4,
+        COUNT(DISTINCT a.id)::int as agent_count
+      FROM stores s
+      LEFT JOIN customers c ON c.store_id = s.id
+      LEFT JOIN agents a ON a.store_id = s.id
+      GROUP BY s.id, s.name, s.city, s.district
+      ORDER BY s.city, s.id
+    `);
+
+    const result = stores.map(s => {
+      const total = s.total || 0;
+      const visited = (s.p2 || 0) + (s.p3 || 0) + (s.p4 || 0);
+      const deposited = (s.p3 || 0) + (s.p4 || 0);
+      return {
+        ...s,
+        rate_p1_p2: total > 0 ? +((visited / total) * 100).toFixed(1) : 0,
+        rate_p2_p3: visited > 0 ? +((deposited / visited) * 100).toFixed(1) : 0,
+        rate_overall: total > 0 ? +(((s.p4 || 0) / total) * 100).toFixed(1) : 0,
+      };
+    });
+
+    const headers = ['门店ID', '门店名称', '城市', '区域', '运营官数', '客户总数', 'P1线索', 'P2到访', 'P3交定', 'P4签约', '到访率%', '交定率%', '签约率%'];
+    const fields = ['id', 'name', 'city', 'district', 'agent_count', 'total', 'p1', 'p2', 'p3', 'p4', 'rate_p1_p2', 'rate_p2_p3', 'rate_overall'];
+
+    function csvEscape(v) {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    let csv = '\ufeff' + headers.map(csvEscape).join(',') + '\r\n';
+    for (const row of result) {
+      csv += fields.map(f => csvEscape(row[f])).join(',') + '\r\n';
+    }
+
+    const filename = `store_summary_${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (e) {
+    console.error('Export store summary error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ==================== API: STORES & AGENTS ====================
