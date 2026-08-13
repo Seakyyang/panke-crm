@@ -254,6 +254,8 @@ tr:hover { background: #fafafa; }
     <div class="header-user">
       <span id="userDisplay"></span>
       <span class="role-tag" id="roleTag"></span>
+      <button class="btn-admin" id="btnUserApproval" style="display:none;padding:4px 12px;border:1px solid var(--warning);border-radius:4px;background:#fff7e6;color:var(--warning);cursor:pointer;font-size:13px;" onclick="openUserApprovalModal()">用户审核</button>
+      <button class="btn-admin" id="btnExport" style="display:none;padding:4px 12px;border:1px solid var(--success);border-radius:4px;background:#f6ffed;color:var(--success);cursor:pointer;font-size:13px;" onclick="openExportModal()">导出数据</button>
       <button class="btn-logout" onclick="logout()">退出</button>
     </div>
   </div>
@@ -438,6 +440,49 @@ tr:hover { background: #fafafa; }
   </div>
 </div>
 
+<!-- Modal: User Approval (admin only) -->
+<div class="modal-overlay" id="userApprovalModal">
+  <div class="modal" style="width:700px">
+    <span class="modal-close" onclick="closeModal('userApprovalModal')">&times;</span>
+    <h2>用户审核管理</h2>
+    <div style="margin-bottom:12px;padding:8px 12px;background:#f6f8fa;border-radius:4px;font-size:13px;color:var(--text-secondary)">
+      新注册用户需管理员审核通过后才能登录。点击"通过"即可放行，点击"拒绝"则该用户无法登录。
+    </div>
+    <div id="userApprovalList" style="max-height:500px;overflow-y:auto"></div>
+    <div class="modal-actions">
+      <button class="btn btn-default" onclick="closeModal('userApprovalModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Export Data (admin only) -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal" style="width:480px">
+    <span class="modal-close" onclick="closeModal('exportModal')">&times;</span>
+    <h2>导出数据</h2>
+    <div style="margin-bottom:16px;padding:8px 12px;background:#f6f8fa;border-radius:4px;font-size:13px;color:var(--text-secondary)">
+      点击下方按钮下载对应的 CSV 文件（可用 Excel 直接打开，已带 UTF-8 编码）。
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary" onclick="exportData('customers')" style="padding:12px;font-size:14px;">
+        📋 导出客户明细 (CSV)
+        <div style="font-size:12px;font-weight:normal;opacity:0.9">含客户基本信息、阶段、评级、跟进记录</div>
+      </button>
+      <button class="btn btn-primary" onclick="exportData('followups')" style="padding:12px;font-size:14px;">
+        📝 导出跟进记录 (CSV)
+        <div style="font-size:12px;font-weight:normal;opacity:0.9">含所有客户的跟进时间线</div>
+      </button>
+      <button class="btn btn-primary" onclick="exportData('store-summary')" style="padding:12px;font-size:14px;">
+        🏪 导出门店汇总 (CSV)
+        <div style="font-size:12px;font-weight:normal;opacity:0.9">19家门店的客户数、转化率、运营官数</div>
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-default" onclick="closeModal('exportModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============ STATE ============
 let token = localStorage.getItem('mkToken') || '';
@@ -485,10 +530,10 @@ function doRegister() {
     body: JSON.stringify({ username, password, role, store_name, agent_name })
   }).then(r => r.json()).then(d => {
     if (d.error) { alert(d.error); return; }
-    alert('注册成功！请使用新账号登录');
+    alert(d.message || '注册成功！请等待管理员审核后即可登录');
     closeRegister();
     document.getElementById('loginUser').value = username;
-    document.getElementById('loginPass').value = password;
+    document.getElementById('loginPass').value = '';
   }).catch(e => alert('注册失败：网络错误'));
 }
 
@@ -499,6 +544,103 @@ function logout() {
   token = ''; userRole = ''; userName = '';
   document.getElementById('app').classList.remove('show');
   document.getElementById('loginWrap').style.display = 'flex';
+}
+
+// ============ USER APPROVAL (admin) ============
+function openUserApprovalModal() {
+  document.getElementById('userApprovalModal').classList.add('show');
+  loadPendingUsers();
+}
+
+function loadPendingUsers() {
+  fetch('/api/admin/pending-users', { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      if (d.error) { alert(d.error); return; }
+      const list = document.getElementById('userApprovalList');
+      if (!d.users || d.users.length === 0) {
+        list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-secondary)">暂无待审核用户</div>';
+        return;
+      }
+      const roleMap = { admin: '管理员', manager: '门店经理', agent: '员工' };
+      const statusMap = {
+        pending: '<span style="color:var(--warning);">待审核</span>',
+        rejected: '<span style="color:var(--danger);">已拒绝</span>',
+        approved: '<span style="color:var(--success);">已通过</span>',
+        disabled: '<span style="color:var(--text-secondary);">已禁用</span>',
+      };
+      list.innerHTML = d.users.map(u => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;background:#fff">
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:14px">${u.username} <span style="font-size:12px;color:var(--text-secondary);font-weight:normal">(${roleMap[u.role] || u.role})</span></div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">
+              ${u.agent_name ? '运营官：' + u.agent_name + ' · ' : ''}${u.store_name ? '门店：' + u.store_name : '未指定门店'}
+              · 状态：${statusMap[u.status] || u.status}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px">
+            ${u.status === 'pending' ? `<button class="btn-sm primary" onclick="approveUser(${u.id})">通过</button><button class="btn-sm danger" onclick="rejectUser(${u.id})">拒绝</button>` : ''}
+            ${u.status === 'rejected' ? `<button class="btn-sm primary" onclick="approveUser(${u.id})">恢复通过</button>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }).catch(e => alert('加载失败：' + e));
+}
+
+function approveUser(userId) {
+  fetch('/api/admin/approve-user', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ user_id: userId })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    alert('已审核通过');
+    loadPendingUsers();
+  }).catch(e => alert('操作失败：' + e));
+}
+
+function rejectUser(userId) {
+  if (!confirm('确定拒绝该用户的注册申请吗？')) return;
+  fetch('/api/admin/reject-user', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ user_id: userId })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    alert('已拒绝');
+    loadPendingUsers();
+  }).catch(e => alert('操作失败：' + e));
+}
+
+// ============ EXPORT DATA (admin) ============
+function openExportModal() {
+  document.getElementById('exportModal').classList.add('show');
+}
+
+function exportData(type) {
+  // 直接通过浏览器下载 CSV
+  const url = `/api/export/${type}`;
+  fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => {
+      if (!r.ok) return r.json().then(d => { throw new Error(d.error || '导出失败'); });
+      return r.blob();
+    })
+    .then(blob => {
+      // 从 Content-Disposition 提取文件名
+      const a = document.createElement('a');
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      const filenames = {
+        customers: `客户明细_${dateStr}.csv`,
+        followups: `跟进记录_${dateStr}.csv`,
+        'store-summary': `门店汇总_${dateStr}.csv`,
+      };
+      a.href = URL.createObjectURL(blob);
+      a.download = filenames[type] || `export_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }).catch(e => alert('导出失败：' + e.message));
 }
 
 function showApp(userInfo) {
@@ -514,6 +656,10 @@ function showApp(userInfo) {
   // Hide store filter for non-admin
   document.getElementById('storeFilterItem').style.display = userInfo.role === 'admin' ? 'flex' : 'none';
   document.getElementById('agentFilterItem').style.display = (userInfo.role === 'admin' || userInfo.role === 'manager') ? 'flex' : 'none';
+  // Show admin-only buttons
+  const isAdmin = userInfo.role === 'admin';
+  document.getElementById('btnUserApproval').style.display = isAdmin ? 'inline-block' : 'none';
+  document.getElementById('btnExport').style.display = isAdmin ? 'inline-block' : 'none';
   initFilters();
 }
 
