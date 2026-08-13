@@ -256,6 +256,7 @@ tr:hover { background: #fafafa; }
       <span class="role-tag" id="roleTag"></span>
       <button class="btn-admin" id="btnUserApproval" style="display:none;padding:4px 12px;border:1px solid var(--warning);border-radius:4px;background:#fff7e6;color:var(--warning);cursor:pointer;font-size:13px;" onclick="openUserApprovalModal()">用户审核</button>
       <button class="btn-admin" id="btnExport" style="display:none;padding:4px 12px;border:1px solid var(--success);border-radius:4px;background:#f6ffed;color:var(--success);cursor:pointer;font-size:13px;" onclick="openExportModal()">导出数据</button>
+      <button class="btn-logout" onclick="openChangePasswordModal()" style="border-color:var(--primary);color:var(--primary);">修改密码</button>
       <button class="btn-logout" onclick="logout()">退出</button>
     </div>
   </div>
@@ -483,6 +484,30 @@ tr:hover { background: #fafafa; }
   </div>
 </div>
 
+<!-- Modal: Change Password (all users) -->
+<div class="modal-overlay" id="changePasswordModal">
+  <div class="modal" style="width:400px">
+    <span class="modal-close" onclick="closeModal('changePasswordModal')">&times;</span>
+    <h2>修改密码</h2>
+    <div class="form-item" style="margin-bottom:12px">
+      <label>旧密码</label>
+      <input type="password" id="oldPassword" placeholder="请输入当前密码">
+    </div>
+    <div class="form-item" style="margin-bottom:12px">
+      <label>新密码</label>
+      <input type="password" id="newPassword" placeholder="至少6位">
+    </div>
+    <div class="form-item" style="margin-bottom:12px">
+      <label>确认新密码</label>
+      <input type="password" id="newPasswordConfirm" placeholder="再输入一次新密码">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-default" onclick="closeModal('changePasswordModal')">取消</button>
+      <button class="btn btn-primary" onclick="changePassword()">确认修改</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============ STATE ============
 let token = localStorage.getItem('mkToken') || '';
@@ -641,6 +666,42 @@ function exportData(type) {
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
     }).catch(e => alert('导出失败：' + e.message));
+}
+
+// ============ CHANGE PASSWORD (all users) ============
+function openChangePasswordModal() {
+  document.getElementById('oldPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  document.getElementById('newPasswordConfirm').value = '';
+  document.getElementById('changePasswordModal').classList.add('show');
+}
+
+function changePassword() {
+  const oldPw = document.getElementById('oldPassword').value;
+  const newPw = document.getElementById('newPassword').value;
+  const confirmPw = document.getElementById('newPasswordConfirm').value;
+
+  if (!oldPw || !newPw || !confirmPw) { alert('请填写所有字段'); return; }
+  if (newPw.length < 6) { alert('新密码至少6位'); return; }
+  if (newPw !== confirmPw) { alert('两次输入的新密码不一致'); return; }
+  if (oldPw === newPw) { alert('新密码不能与旧密码相同'); return; }
+
+  fetch('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ old_password: oldPw, new_password: newPw })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    alert('密码修改成功，请重新登录');
+    closeModal('changePasswordModal');
+    // 更新本地 token 并强制重新登录
+    localStorage.removeItem('mkToken');
+    localStorage.removeItem('mkRole');
+    localStorage.removeItem('mkName');
+    token = ''; userRole = ''; userName = '';
+    document.getElementById('app').classList.remove('show');
+    document.getElementById('loginWrap').style.display = 'flex';
+  }).catch(e => alert('修改失败：网络错误'));
 }
 
 function showApp(userInfo) {
