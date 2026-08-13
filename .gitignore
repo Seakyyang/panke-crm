@@ -1,0 +1,4 @@
+node_modules
+conversion.db
+*.log
+.env

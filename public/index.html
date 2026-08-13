@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>华南区域19门店营销管理协同平台</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --primary: #1677ff;
+  --primary-light: #e6f0ff;
+  --success: #52c41a;
+  --warning: #faad14;
+  --danger: #ff4d4f;
+  --text: #1f1f1f;
+  --text-secondary: #8c8c8c;
+  --bg: #f0f2f5;
+  --card-bg: #fff;
+  --border: #e8e8e8;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+
+/* Login */
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #1677ff 0%, #0958d9 100%); }
+.login-box { background: #fff; border-radius: 12px; padding: 40px; width: 380px; box-shadow: 0 8px 40px rgba(0,0,0,0.2); }
+.login-box h1 { font-size: 22px; text-align: center; margin-bottom: 8px; color: var(--text); }
+.login-box p { text-align: center; color: var(--text-secondary); margin-bottom: 24px; font-size: 13px; }
+.login-box input { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: var(--radius); padding: 0 12px; font-size: 14px; margin-bottom: 12px; outline: none; transition: border-color .2s; }
+.login-box input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
+.login-box button { width: 100%; height: 42px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); font-size: 15px; cursor: pointer; transition: opacity .2s; }
+.login-box button:hover { opacity: .9; }
+.login-hint { margin-top: 16px; padding: 12px; background: #f6f8fa; border-radius: var(--radius); font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+.login-hint b { color: var(--text); }
+
+/* Layout */
+.app { display: none; }
+.app.show { display: block; }
+.header { background: #fff; border-bottom: 1px solid var(--border); padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header-logo { font-size: 17px; font-weight: 600; color: var(--primary); }
+.header-user { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-secondary); }
+.header-user .role-tag { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+.role-tag.admin { background: #fff1f0; color: var(--danger); }
+.role-tag.manager { background: #fff7e6; color: var(--warning); }
+.role-tag.agent { background: #f6ffed; color: var(--success); }
+.btn-logout { padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: #fff; cursor: pointer; font-size: 13px; color: var(--text-secondary); }
+.btn-logout:hover { border-color: var(--danger); color: var(--danger); }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; padding: 0 24px; background: #fff; border-bottom: 1px solid var(--border); }
+.tab { padding: 12px 24px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: all .2s; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab:hover { color: var(--primary); }
+
+/* Filters */
+.filters { padding: 12px 24px; background: #fff; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.filter-item { display: flex; align-items: center; gap: 6px; }
+.filter-item label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.filter-item select { height: 32px; border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; font-size: 13px; outline: none; background: #fff; min-width: 120px; }
+.filter-item select:focus { border-color: var(--primary); }
+
+/* Content */
+.content { padding: 16px 24px; }
+
+/* KPI Cards */
+.kpi-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; margin-bottom: 16px; }
+.kpi-card { background: var(--card-bg); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+.kpi-card .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.kpi-card .value { font-size: 24px; font-weight: 700; line-height: 1.2; }
+.kpi-card .sub { font-size: 11px; margin-top: 4px; }
+.kpi-card.p1 .value { color: #1677ff; }
+.kpi-card.p2 .value { color: #722ed1; }
+.kpi-card.p3 .value { color: #fa8c16; }
+.kpi-card.p4 .value { color: #52c41a; }
+.kpi-card.rate .value { color: var(--text); }
+
+/* Chart grid */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-grid.full { grid-template-columns: 1fr; }
+.chart-card { background: var(--card-bg); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+.chart-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+.chart-card h3 .chart-sub { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.chart-box { width: 100%; height: 320px; }
+.chart-box.tall { height: 400px; }
+
+/* Analysis KPIs */
+.analysis-kpi { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+.analysis-kpi .kpi-card .value { font-size: 22px; }
+
+/* Suggestion */
+.suggestion-list { display: flex; flex-direction: column; gap: 8px; }
+.suggestion-item { padding: 12px 14px; border-radius: 6px; border-left: 3px solid; background: #fafafa; }
+.suggestion-item.high { border-color: var(--danger); background: #fff2f0; }
+.suggestion-item.medium { border-color: var(--warning); background: #fffbe6; }
+.suggestion-item.low { border-color: var(--primary); background: #f0f5ff; }
+.suggestion-item .title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.suggestion-item .detail { font-size: 12px; color: var(--text-secondary); }
+.suggestion-item .priority { font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-right: 6px; font-weight: 600; }
+.priority.high { background: var(--danger); color: #fff; }
+.priority.medium { background: var(--warning); color: #fff; }
+.priority.low { background: var(--primary); color: #fff; }
+
+/* Customer cards */
+.cust-section { margin-bottom: 16px; }
+.cust-section h3 { font-size: 14px; font-weight: 600; margin-bottom: 10px; padding-left: 8px; border-left: 3px solid var(--primary); }
+.cust-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.cust-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 13px; }
+.cust-card .name { font-weight: 600; font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; }
+.cust-card .meta { color: var(--text-secondary); font-size: 12px; margin-bottom: 6px; }
+.cust-card .score-bar { height: 4px; border-radius: 2px; background: #f0f0f0; margin-top: 6px; overflow: hidden; }
+.cust-card .score-fill { height: 100%; border-radius: 2px; }
+.rating-tag { padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.rating-tag.a { background: #f6ffed; color: #52c41a; }
+.rating-tag.b { background: #e6f7ff; color: #1677ff; }
+.rating-tag.c { background: #fff7e6; color: #fa8c16; }
+.rating-tag.d { background: #fff2f0; color: #ff4d4f; }
+.rating-tag.signed { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+.level-tag { padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.level-tag.p1 { background: #e6f7ff; color: #1677ff; }
+.level-tag.p2 { background: #f9f0ff; color: #722ed1; }
+.level-tag.p3 { background: #fff7e6; color: #fa8c16; }
+.level-tag.p4 { background: #f6ffed; color: #52c41a; }
+
+/* Table */
+.table-wrap { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); overflow: hidden; }
+.table-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.table-header h3 { font-size: 14px; font-weight: 600; }
+.table-scroll { overflow-x: auto; max-height: 500px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { position: sticky; top: 0; background: #fafafa; z-index: 1; }
+th { padding: 8px 12px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 8px 12px; border-bottom: 1px solid #f5f5f5; white-space: nowrap; }
+tr:hover { background: #fafafa; }
+.btn-sm { padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; margin-right: 4px; }
+.btn-sm:hover { border-color: var(--primary); color: var(--primary); }
+.btn-sm.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-sm.danger { color: var(--danger); }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 8px; padding: 24px; width: 600px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+.modal.wide { width: 720px; }
+.modal h2 { font-size: 17px; margin-bottom: 16px; }
+.modal-close { float: right; cursor: pointer; font-size: 20px; color: var(--text-secondary); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.modal-header h3 { font-size: 17px; margin: 0; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid.full { grid-template-columns: 1fr; }
+.form-item { display: flex; flex-direction: column; gap: 4px; }
+.form-item label { font-size: 12px; color: var(--text-secondary); }
+.form-item input, .form-item select, .form-item textarea { height: 34px; border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; font-size: 13px; outline: none; }
+.form-item textarea { height: auto; min-height: 60px; padding: 6px 8px; resize: vertical; }
+.form-item input:focus, .form-item select:focus, .form-item textarea:focus { border-color: var(--primary); }
+.modal-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
+.btn { padding: 6px 16px; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-default { background: #fff; border: 1px solid var(--border); color: var(--text); }
+
+/* Floating button */
+.fab { position: fixed; right: 32px; bottom: 32px; width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; border: none; font-size: 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(22,119,255,0.4); z-index: 50; display: flex; align-items: center; justify-content: center; }
+.fab:hover { transform: scale(1.05); }
+
+/* Followup timeline */
+.fu-timeline { max-height: 300px; overflow-y: auto; }
+.fu-item { padding: 8px 0; border-bottom: 1px solid #f5f5f5; }
+.fu-item .fu-meta { font-size: 12px; color: var(--text-secondary); }
+.fu-item .fu-content { font-size: 13px; margin-top: 2px; }
+
+.empty { text-align: center; padding: 40px; color: var(--text-secondary); font-size: 14px; }
+
+@media (max-width: 1200px) {
+  .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+  .analysis-kpi { grid-template-columns: repeat(3, 1fr); }
+  .chart-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div class="login-wrap" id="loginWrap">
+  <div class="login-box">
+    <h1>华南区域19门店营销管理协同平台</h1>
+    <p>基于盘客表结构 · 三级权限管理 · 转化率分析</p>
+    <input type="text" id="loginUser" placeholder="用户名" value="admin">
+    <input type="password" id="loginPass" placeholder="密码" value="admin123">
+    <button onclick="doLogin()">登 录</button>
+    <div style="text-align:center;margin-top:12px;font-size:13px;">
+      没有账号？<a href="javascript:void(0)" onclick="showRegister()" style="color:var(--primary);text-decoration:none;">注册新账号</a>
+    </div>
+    <div class="login-hint">
+      <b>测试账号：</b><br>
+      总部管理员：admin / admin123<br>
+      门店经理：mgr01 / mgr123（深圳福围店）<br>
+      员工：agent01 / 123456（胡映-深圳福围店）
+    </div>
+  </div>
+</div>
+
+<!-- Register Modal -->
+<div class="modal-overlay" id="regModal" style="display:none;">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h3>注册新账号</h3>
+      <span class="modal-close" onclick="closeRegister()">&times;</span>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;margin-bottom:4px;color:var(--text);">用户名 *</label>
+        <input type="text" id="regUser" style="width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;font-size:14px;" placeholder="至少2个字符">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;margin-bottom:4px;color:var(--text);">密码 *</label>
+        <input type="password" id="regPass" style="width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;font-size:14px;" placeholder="至少6位">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;margin-bottom:4px;color:var(--text);">角色</label>
+        <select id="regRole" style="width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;font-size:14px;">
+          <option value="agent">员工</option>
+          <option value="manager">门店经理</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;margin-bottom:4px;color:var(--text);">门店</label>
+        <input type="text" id="regStore" list="regStoreOptions" style="width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;font-size:14px;" placeholder="选择或输入门店名" autocomplete="off">
+        <datalist id="regStoreOptions">
+          <option value="深圳福围店"><option value="深圳前海店"><option value="深圳南山店"><option value="深圳横岗店">
+          <option value="深圳福田店"><option value="深圳平湖店"><option value="深圳海一"><option value="深圳海二">
+          <option value="深圳大浪店"><option value="深圳大芬店"><option value="深圳龙华店">
+          <option value="广州珠宝店"><option value="广州市桥店"><option value="广州万博店"><option value="广州钟村店">
+          <option value="广州科学城店"><option value="广州诺亚店"><option value="广州逸景路店"><option value="广州弘大店"><option value="广州乐飞店">
+        </datalist>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:13px;margin-bottom:4px;color:var(--text);">运营官姓名</label>
+        <input type="text" id="regAgent" style="width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;font-size:14px;" placeholder="您的真实姓名">
+      </div>
+      <button onclick="doRegister()" style="width:100%;height:42px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:15px;cursor:pointer;">注 册</button>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <span class="header-logo">华南区域19门店营销管理协同平台</span>
+    </div>
+    <div class="header-user">
+      <span id="userDisplay"></span>
+      <span class="role-tag" id="roleTag"></span>
+      <button class="btn-logout" onclick="logout()">退出</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('dashboard')">转化看板</div>
+    <div class="tab" onclick="switchTab('analysis')">客户分析</div>
+    <div class="tab" onclick="switchTab('list')">客户明细</div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters" id="filters">
+    <div class="filter-item">
+      <label>城市：</label>
+      <select id="filterCity" onchange="onFilterChange()"><option value="">全部</option><option value="深圳">深圳</option><option value="广州">广州</option></select>
+    </div>
+    <div class="filter-item" id="storeFilterItem">
+      <label>门店：</label>
+      <select id="filterStore" onchange="onFilterChange()"><option value="">全部门店</option></select>
+    </div>
+    <div class="filter-item" id="agentFilterItem">
+      <label>员工：</label>
+      <select id="filterAgent" onchange="onFilterChange()"><option value="">全部员工</option></select>
+    </div>
+  </div>
+
+  <!-- Tab: Dashboard -->
+  <div class="content" id="tabDashboard">
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>转化漏斗 <span class="chart-sub">P1线索 → P2到访 → P3交定 → P4签约</span></h3><div id="chartFunnel" class="chart-box"></div></div>
+      <div class="chart-card"><h3>渠道P4成交占比 <span class="chart-sub" id="channelMode">按签约数</span></h3><div id="chartChannel" class="chart-box"></div></div>
+    </div>
+    <div class="chart-grid full">
+      <div class="chart-card"><h3>19家门店转化漏斗对比 <span class="chart-sub">各门店P1/P2/P3/P4分布</span></h3><div id="chartStoreFunnel" class="chart-box tall"></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>员工转化率排行 <span class="chart-sub">整体转化率降序</span></h3><div id="chartAgentRank" class="chart-box"></div></div>
+      <div class="chart-card"><h3>每日新增趋势 <span class="chart-sub">按日期统计各阶段新增</span></h3><div id="chartTrend" class="chart-box"></div></div>
+    </div>
+    <div class="chart-grid full">
+      <div class="chart-card"><h3>TOP5 榜单 <span class="chart-sub">门店签约 / 员工签约 / 渠道产出</span></h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+          <div><h4 style="font-size:13px;margin-bottom:8px;color:var(--text-secondary)">门店签约TOP5</h4><div id="topStores"></div></div>
+          <div><h4 style="font-size:13px;margin-bottom:8px;color:var(--text-secondary)">员工签约TOP5</h4><div id="topAgents"></div></div>
+          <div><h4 style="font-size:13px;margin-bottom:8px;color:var(--text-secondary)">渠道产出TOP5</h4><div id="topChannels"></div></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- Tab: Analysis -->
+  <div class="content" id="tabAnalysis" style="display:none">
+    <div class="analysis-kpi" id="analysisKpi"></div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>客户评级分布</h3><div id="chartRatingDist" class="chart-box"></div></div>
+      <div class="chart-card"><h3>客户抗性分析</h3><div id="chartObjection" class="chart-box"></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>预算分布</h3><div id="chartBudget" class="chart-box"></div></div>
+      <div class="chart-card"><h3>意向户型分布</h3><div id="chartUnitType" class="chart-box"></div></div>
+    </div>
+    <div class="cust-section">
+      <h3>高价值客户（A级意向 / 已签约 / P3交定）</h3>
+      <div class="cust-cards" id="highValueCards"></div>
+    </div>
+    <div class="cust-section">
+      <h3>流失风险预警（D级流失 / C级P1线索）</h3>
+      <div class="cust-cards" id="churnRiskCards"></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:16px">
+      <h3>智能优化建议 <span class="chart-sub">基于数据自动生成</span></h3>
+      <div class="suggestion-list" id="suggestionList"></div>
+    </div>
+  </div>
+
+  <!-- Tab: List -->
+  <div class="content" id="tabList" style="display:none">
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3>客户明细</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="searchInput" placeholder="搜索客户名/跟进记录" style="height:30px;border:1px solid var(--border);border-radius:4px;padding:0 8px;font-size:13px;width:200px" onkeyup="if(event.key==='Enter')loadCustomers()">
+          <select id="filterLevel" style="height:30px;border:1px solid var(--border);border-radius:4px;padding:0 8px;font-size:13px" onchange="loadCustomers()">
+            <option value="">全部阶段</option><option value="P1">P1-线索</option><option value="P2">P2-到访</option><option value="P3">P3-交定</option><option value="P4">P4-签约</option>
+          </select>
+          <select id="filterRating" style="height:30px;border:1px solid var(--border);border-radius:4px;padding:0 8px;font-size:13px" onchange="loadCustomers()">
+            <option value="">全部评级</option><option value="A:有意向">A:有意向</option><option value="B:待跟进">B:待跟进</option><option value="C:抗性大转化难">C:抗性大转化难</option><option value="D:已流失">D:已流失</option><option value="已签约">已签约</option><option value="低需求">低需求</option>
+          </select>
+          <button class="btn btn-primary" onclick="loadCustomers()">刷新</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>日期</th><th>阶段</th><th>客户名称</th><th>运营官</th><th>门店</th><th>渠道</th><th>户型</th><th>预算</th><th>评级</th><th>抗性</th><th>跟进次数</th><th>操作</th>
+          </tr></thead>
+          <tbody id="custTbody"></tbody>
+        </table>
+      </div>
+      <div style="padding:8px 16px;font-size:13px;color:var(--text-secondary);border-top:1px solid var(--border)" id="custPage"></div>
+    </div>
+  </div>
+
+  <button class="fab" id="fabBtn" onclick="openAddModal()" title="新增客户">+</button>
+</div>
+
+<!-- Modal: Add/Edit Customer -->
+<div class="modal-overlay" id="custModal">
+  <div class="modal wide">
+    <span class="modal-close" onclick="closeModal('custModal')">&times;</span>
+    <h2 id="custModalTitle">新增客户</h2>
+    <input type="hidden" id="editCustId">
+    <div class="form-grid">
+      <div class="form-item"><label>添加日期</label><input type="date" id="fAddDate"></div>
+      <div class="form-item"><label>客储等级 (P1-P4)</label><select id="fLevel"><option value="P1">P1-线索</option><option value="P2">P2-到访</option><option value="P3">P3-交定</option><option value="P4">P4-签约</option></select></div>
+      <div class="form-item"><label>门店</label><input type="text" id="fStore" list="storeOptions" placeholder="选择或输入门店" autocomplete="off"><datalist id="storeOptions"><option value="深圳前海店"><option value="深圳南山店"><option value="深圳横岗店"><option value="深圳福田店"><option value="深圳平湖店"><option value="深圳海一"><option value="深圳海二"><option value="深圳大浪店"><option value="深圳大芬店"><option value="深圳龙华店"><option value="广州珠宝店"><option value="广州市桥店"><option value="广州万博店"><option value="广州钟村店"><option value="广州科学城店"><option value="广州诺亚店"><option value="广州逸景路店"><option value="广州弘大店"><option value="广州乐飞店"></datalist></div>
+      <div class="form-item"><label>运营官</label><input type="text" id="fAgent" list="agentOptions" placeholder="选择或输入运营官" autocomplete="off"><datalist id="agentOptions"></datalist></div>
+      <div class="form-item"><label>客户姓名/微信昵称</label><input type="text" id="fName" placeholder="客户姓名或微信昵称"></div>
+      <div class="form-item"><label>人口结构</label><select id="fDemo"><option value="">请选择</option><option value="单男">单男</option><option value="单女">单女</option><option value="情侣">情侣</option><option value="夫妻">夫妻</option><option value="三口之家">三口之家</option><option value="三口及以上多口之家">三口及以上多口之家</option></select></div>
+      <div class="form-item"><label>年龄段</label><select id="fAge"><option value="">请选择</option><option value="21-30岁">21-30岁</option><option value="31-40岁">31-40岁</option><option value="41-50岁">41-50岁</option><option value="50岁以上">50岁以上</option></select></div>
+      <div class="form-item"><label>接待时长预估(针对P2)</label><select id="fDuration"><option value="">未到访</option><option value="20分钟内">20分钟内</option><option value="30分钟内">30分钟内</option><option value="60分钟内">60分钟内</option><option value="60分钟以上">60分钟以上</option></select></div>
+      <div class="form-item"><label>渠道</label><select id="fChannel"><option value="">请选择</option><option value="贝壳">贝壳</option><option value="三网">三网</option><option value="老带新">老带新</option><option value="新带新">新带新</option><option value="小红书">小红书</option><option value="抖音">抖音</option><option value="咸鱼">咸鱼</option><option value="中介">中介</option><option value="AI推荐">AI推荐</option><option value="店招">店招</option><option value="其他">其他</option></select></div>
+      <div class="form-item"><label>工作区域</label><input type="text" id="fWorkArea" placeholder="如：南山、福田"></div>
+      <div class="form-item"><label>意向户型</label><input type="text" id="fUnit" list="unitOptions" placeholder="选择或输入户型" autocomplete="off"><datalist id="unitOptions"><option value="阳光loft"><option value="暗房性价比loft"><option value="复式loft"><option value="一房一厅"><option value="单间"></datalist></div>
+      <div class="form-item"><label>总价预算</label><input type="text" id="fBudget" placeholder="如：2000、2500内"></div>
+      <div class="form-item"><label>抗性</label><input type="text" id="fObjection" list="objectionOptions" placeholder="选择或输入抗性" autocomplete="off"><datalist id="objectionOptions"><option value="价格"><option value="房型价格"><option value="房间"><option value="价格 房型"><option value="位置"><option value="采光"><option value="预算不足"><option value="已租其他"></datalist></div>
+      <div class="form-item"><label>租期(月)</label><select id="fLeaseTerm"><option value="">请选择</option><option value="1-2个月">1-2个月</option><option value="3-5个月">3-5个月</option><option value="6-11个月">6-11个月</option><option value="12个月及以上">12个月及以上</option></select></div>
+      <div class="form-item"><label>入住时间</label><select id="fMoveIn"><option value="">请选择</option><option value="最近">最近</option><option value="近期">近期</option><option value="一周内">一周内</option><option value="两周内">两周内</option><option value="一个月内">一个月内</option><option value="没说">没说</option></select></div>
+      <div class="form-item"><label>客户意向等级</label><select id="fRating"><option value="">请选择</option><option value="A:有意向">A:有意向</option><option value="B:待跟进">B:待跟进</option><option value="C:抗性大转化难">C:抗性大转化难</option><option value="D:已流失">D:已流失</option><option value="已签约">已签约</option><option value="低需求">低需求</option></select></div>
+      <div class="form-item"><label>优惠释放情况</label><input type="text" id="fDiscount" placeholder="如：免物业费1个月"></div>
+    </div>
+    <div class="form-grid full" style="margin-top:12px">
+      <div class="form-item"><label>接待情况 / 跟进记录</label><textarea id="fNotes" placeholder="详细记录客户接待情况、需求、沟通内容..."></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-default" onclick="closeModal('custModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveCustomer()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Follow-up -->
+<div class="modal-overlay" id="fuModal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeModal('fuModal')">&times;</span>
+    <h2>跟进记录</h2>
+    <input type="hidden" id="fuCustId">
+    <div id="fuCustomerInfo" style="background:#f6f8fa;padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:13px"></div>
+    <div class="fu-timeline" id="fuTimeline" style="margin-bottom:16px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px">
+      <h4 style="font-size:14px;margin-bottom:8px">新增跟进</h4>
+      <div class="form-grid">
+        <div class="form-item"><label>跟进方式</label><select id="fuType"><option value="phone">电话</option><option value="wechat">微信</option><option value="visit">到店</option><option value="other">其他</option></select></div>
+        <div class="form-item"><label>下一步动作</label><input type="text" id="fuNext" placeholder="如：3天后回访"></div>
+      </div>
+      <div class="form-grid full" style="margin-top:8px">
+        <div class="form-item"><label>跟进内容</label><textarea id="fuContent" placeholder="填写跟进内容..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-default" onclick="closeModal('fuModal')">关闭</button>
+      <button class="btn btn-primary" onclick="saveFollowup()">提交跟进</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Stage Advance -->
+<div class="modal-overlay" id="stageModal">
+  <div class="modal" style="width:400px">
+    <span class="modal-close" onclick="closeModal('stageModal')">&times;</span>
+    <h2>阶段推进</h2>
+    <input type="hidden" id="stageCustId">
+    <div id="stageInfo" style="background:#f6f8fa;padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:13px"></div>
+    <div class="form-item" style="margin-bottom:12px"><label>推进至</label><select id="stageTarget"><option value="P1">P1-线索</option><option value="P2">P2-到访</option><option value="P3">P3-交定</option><option value="P4">P4-签约</option></select></div>
+    <div class="form-item" style="margin-bottom:12px"><label>备注</label><input type="text" id="stageNote" placeholder="推进原因/备注"></div>
+    <div class="modal-actions">
+      <button class="btn btn-default" onclick="closeModal('stageModal')">取消</button>
+      <button class="btn btn-primary" onclick="advanceStage()">确认推进</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ STATE ============
+let token = localStorage.getItem('mkToken') || '';
+let userRole = '';
+let userName = '';
+let stores = [];
+let agents = [];
+let charts = {};
+let channelMode = 'signed'; // 'signed' | 'total' | 'rate'
+let currentPage = 1;
+const pageSize = 50;
+
+// ============ LOGIN ============
+function doLogin() {
+  const u = document.getElementById('loginUser').value;
+  const p = document.getElementById('loginPass').value;
+  fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) })
+    .then(r => r.json()).then(d => {
+      if (d.error) { alert(d.error); return; }
+      token = d.token; userRole = d.role; userName = d.agentName || d.username;
+      localStorage.setItem('mkToken', token);
+      localStorage.setItem('mkRole', userRole);
+      localStorage.setItem('mkName', userName);
+      showApp(d);
+    }).catch(e => alert('登录失败：网络错误'));
+}
+
+// ============ REGISTER ============
+function showRegister() {
+  document.getElementById('regModal').style.display = 'flex';
+}
+function closeRegister() {
+  document.getElementById('regModal').style.display = 'none';
+}
+function doRegister() {
+  const username = document.getElementById('regUser').value.trim();
+  const password = document.getElementById('regPass').value;
+  const role = document.getElementById('regRole').value;
+  const store_name = document.getElementById('regStore').value.trim();
+  const agent_name = document.getElementById('regAgent').value.trim();
+  if (!username || !password) { alert('请填写用户名和密码'); return; }
+  fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, role, store_name, agent_name })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    alert('注册成功！请使用新账号登录');
+    closeRegister();
+    document.getElementById('loginUser').value = username;
+    document.getElementById('loginPass').value = password;
+  }).catch(e => alert('注册失败：网络错误'));
+}
+
+function logout() {
+  localStorage.removeItem('mkToken');
+  localStorage.removeItem('mkRole');
+  localStorage.removeItem('mkName');
+  token = ''; userRole = ''; userName = '';
+  document.getElementById('app').classList.remove('show');
+  document.getElementById('loginWrap').style.display = 'flex';
+}
+
+function showApp(userInfo) {
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('app').classList.add('show');
+  const roleMap = { admin: '总部管理员', manager: '门店经理', agent: '员工' };
+  document.getElementById('userDisplay').textContent = `${userInfo.agentName || userInfo.username} · ${userInfo.storeName || '总部'}`;
+  const tag = document.getElementById('roleTag');
+  tag.textContent = roleMap[userInfo.role] || userInfo.role;
+  tag.className = `role-tag ${userInfo.role}`;
+  // Hide FAB for agents
+  document.getElementById('fabBtn').style.display = userInfo.role === 'agent' ? 'flex' : 'flex';
+  // Hide store filter for non-admin
+  document.getElementById('storeFilterItem').style.display = userInfo.role === 'admin' ? 'flex' : 'none';
+  document.getElementById('agentFilterItem').style.display = (userInfo.role === 'admin' || userInfo.role === 'manager') ? 'flex' : 'none';
+  initFilters();
+}
+
+// Auto-login
+if (token) {
+  fetch('/api/auth/verify', { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      if (!d.error) {
+        userRole = d.role;
+        userName = d.agentName || d.username;
+        showApp(d);
+      }
+    }).catch(() => {});
+}
+
+// ============ FILTERS ============
+function initFilters() {
+  // Load stores
+  fetch('/api/stores').then(r => r.json()).then(d => {
+    stores = d.stores;
+    const sel = document.getElementById('filterStore');
+    sel.innerHTML = '<option value="">全部门店</option>';
+    stores.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name}</option>`; });
+  });
+  // Load agents
+  fetch('/api/agents').then(r => r.json()).then(d => {
+    agents = d.agents;
+    const sel = document.getElementById('filterAgent');
+    sel.innerHTML = '<option value="">全部员工</option>';
+    agents.forEach(a => { sel.innerHTML += `<option value="${a.id}">${a.name} - ${a.store_name}</option>`; });
+    // Populate form agent datalist (open-ended input)
+    const agentDL = document.getElementById('agentOptions');
+    if (agentDL) {
+      const seen = new Set();
+      agentDL.innerHTML = '';
+      agents.forEach(a => {
+        if (!seen.has(a.name)) { agentDL.innerHTML += `<option value="${a.name}">`; seen.add(a.name); }
+      });
+    }
+  });
+  loadDashboard();
+}
+
+function onFilterChange() {
+  const city = document.getElementById('filterCity').value;
+  const storeSel = document.getElementById('filterStore');
+  // Filter store options by city
+  storeSel.innerHTML = '<option value="">全部门店</option>';
+  stores.filter(s => !city || s.city === city).forEach(s => {
+    storeSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+  // Filter agent options by store
+  const storeId = storeSel.value;
+  const agentSel = document.getElementById('filterAgent');
+  agentSel.innerHTML = '<option value="">全部员工</option>';
+  agents.filter(a => !storeId || a.store_id == storeId).forEach(a => {
+    agentSel.innerHTML += `<option value="${a.id}">${a.name} - ${a.store_name}</option>`;
+  });
+  loadDashboard();
+}
+
+function getFilterParams() {
+  const p = {};
+  if (userRole === 'admin') {
+    const s = document.getElementById('filterStore').value;
+    if (s) p.store_id = s;
+  }
+  if (userRole === 'admin' || userRole === 'manager') {
+    const a = document.getElementById('filterAgent').value;
+    if (a) p.agent_id = a;
+  }
+  return p;
+}
+
+// ============ TABS ============
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tabDashboard').style.display = name === 'dashboard' ? 'block' : 'none';
+  document.getElementById('tabAnalysis').style.display = name === 'analysis' ? 'block' : 'none';
+  document.getElementById('tabList').style.display = name === 'list' ? 'block' : 'none';
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'analysis') loadAnalysis();
+  if (name === 'list') loadCustomers();
+}
+
+// ============ DASHBOARD ============
+function loadDashboard() {
+  const params = new URLSearchParams(getFilterParams());
+  const url = '/api/stats/overview?' + params.toString();
+  fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      if (d.error) return;
+      renderKPIs(d);
+      loadFunnelChart(d);
+      loadChannelChart();
+      loadStoreFunnelChart();
+      loadAgentRankChart();
+      loadTrendChart();
+      loadTopRankings();
+    });
+}
+
+function renderKPIs(d) {
+  const grid = document.getElementById('kpiGrid');
+  const cr = d.conversionRates;
+  const fu = d.followupStats;
+  grid.innerHTML = `
+    <div class="kpi-card p1"><div class="label">P1 线索</div><div class="value">${d.p1}</div><div class="sub">占比${pct(d.p1,d.total)}%</div></div>
+    <div class="kpi-card p2"><div class="label">P2 到访</div><div class="value">${d.p2}</div><div class="sub">占比${pct(d.p2,d.total)}%</div></div>
+    <div class="kpi-card p3"><div class="label">P3 交定</div><div class="value">${d.p3}</div><div class="sub">占比${pct(d.p3,d.total)}%</div></div>
+    <div class="kpi-card p4"><div class="label">P4 签约</div><div class="value">${d.p4}</div><div class="sub">占比${pct(d.p4,d.total)}%</div></div>
+    <div class="kpi-card rate"><div class="label">P1→P2 到访率</div><div class="value">${cr.p1ToP2}%</div><div class="sub">${d.visited}/${d.total}</div></div>
+    <div class="kpi-card rate"><div class="label">P2→P3 交定率</div><div class="value">${cr.p2ToP3}%</div><div class="sub">${d.deposited}/${d.visited}</div></div>
+    <div class="kpi-card rate"><div class="label">P3→P4 签约率</div><div class="value">${cr.p3ToP4}%</div><div class="sub">${d.p4}/${d.deposited}</div></div>
+    <div class="kpi-card rate"><div class="label">P1→P4 整体转化</div><div class="value">${cr.p1ToP4}%</div><div class="sub">跟进率${fu.followupRate}%</div></div>
+  `;
+}
+
+function pct(a, b) { return b > 0 ? ((a / b) * 100).toFixed(1) : '0'; }
+
+function loadFunnelChart(d) {
+  const el = document.getElementById('chartFunnel');
+  if (charts.funnel) charts.funnel.dispose();
+  charts.funnel = echarts.init(el);
+  charts.funnel.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    series: [{
+      type: 'funnel', left: '10%', width: '80%', sort: 'descending', gap: 2,
+      label: { show: true, position: 'inside', fontSize: 14, fontWeight: 'bold' },
+      data: [
+        { value: d.p1, name: `P1 线索 (${d.p1})`, itemStyle: { color: '#1677ff' } },
+        { value: d.p2 + d.p3 + d.p4, name: `P2 到访 (${d.p2 + d.p3 + d.p4})`, itemStyle: { color: '#722ed1' } },
+        { value: d.p3 + d.p4, name: `P3 交定 (${d.p3 + d.p4})`, itemStyle: { color: '#fa8c16' } },
+        { value: d.p4, name: `P4 签约 (${d.p4})`, itemStyle: { color: '#52c41a' } },
+      ]
+    }]
+  });
+}
+
+function loadChannelChart() {
+  const params = new URLSearchParams(getFilterParams());
+  fetch('/api/stats/channel-distribution?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      const el = document.getElementById('chartChannel');
+      if (charts.channel) charts.channel.dispose();
+      charts.channel = echarts.init(el);
+      const data = d.distribution.map(c => ({
+        name: c.channel,
+        value: channelMode === 'signed' ? c.signed : channelMode === 'total' ? c.total : c.sign_rate,
+        total: c.total, signed: c.signed, rate: c.sign_rate
+      }));
+      charts.channel.setOption({
+        tooltip: { trigger: 'item', formatter: p => `${p.name}<br/>总线索: ${p.data.total}<br/>签约: ${p.data.signed}<br/>签约率: ${p.data.rate}%` },
+        legend: { bottom: 0, type: 'scroll' },
+        series: [{
+          type: 'pie', radius: ['35%', '60%'], center: ['50%', '45%'],
+          label: { formatter: '{b}\n{d}%', fontSize: 12 },
+          data: data
+        }]
+      });
+    });
+}
+
+function loadStoreFunnelChart() {
+  fetch('/api/stats/store-funnel', { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      const el = document.getElementById('chartStoreFunnel');
+      if (charts.storeFunnel) charts.storeFunnel.dispose();
+      charts.storeFunnel = echarts.init(el);
+      const stores = d.stores.filter(s => s.total > 0);
+      charts.storeFunnel.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        legend: { top: 0, data: ['P1线索', 'P2到访', 'P3交定', 'P4签约'] },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: stores.map(s => s.name.replace(/深圳|广州/, '')), axisLabel: { rotate: 30, fontSize: 11 } },
+        yAxis: { type: 'value' },
+        series: [
+          { name: 'P1线索', type: 'bar', stack: 'total', data: stores.map(s => s.p1), itemStyle: { color: '#1677ff' } },
+          { name: 'P2到访', type: 'bar', stack: 'total', data: stores.map(s => s.p2), itemStyle: { color: '#722ed1' } },
+          { name: 'P3交定', type: 'bar', stack: 'total', data: stores.map(s => s.p3), itemStyle: { color: '#fa8c16' } },
+          { name: 'P4签约', type: 'bar', stack: 'total', data: stores.map(s => s.p4), itemStyle: { color: '#52c41a' } },
+        ]
+      });
+    });
+}
+
+function loadAgentRankChart() {
+  const params = new URLSearchParams(getFilterParams());
+  fetch('/api/stats/agent-funnel?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      const el = document.getElementById('chartAgentRank');
+      if (charts.agentRank) charts.agentRank.dispose();
+      charts.agentRank = echarts.init(el);
+      const agents = d.agents.filter(a => a.total > 0).sort((a, b) => b.rate_overall - a.rate_overall).slice(0, 15);
+      charts.agentRank.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => {
+          const a = agents[p[0].dataIndex];
+          return `${a.name} (${a.store_name})<br/>线索: ${a.total}<br/>签约: ${a.p4}<br/>转化率: ${a.rate_overall}%`;
+        }},
+        grid: { left: '3%', right: '8%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+        yAxis: { type: 'category', data: agents.map(a => a.name).reverse(), axisLabel: { fontSize: 12 } },
+        series: [{
+          type: 'bar', data: agents.map(a => a.rate_overall).reverse(), barWidth: '60%',
+          itemStyle: { color: function(p) {
+            const v = p.value;
+            return v >= 15 ? '#52c41a' : v >= 8 ? '#1677ff' : v >= 3 ? '#fa8c16' : '#ff4d4f';
+          }},
+          label: { show: true, position: 'right', formatter: '{c}%', fontSize: 11 }
+        }]
+      });
+    });
+}
+
+function loadTrendChart() {
+  const params = new URLSearchParams(getFilterParams());
+  fetch('/api/stats/daily-trend?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      const el = document.getElementById('chartTrend');
+      if (charts.trend) charts.trend.dispose();
+      charts.trend = echarts.init(el);
+      const dates = d.trend.map(t => t.add_date?.slice(5) || '');
+      charts.trend.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { top: 0, data: ['P1线索', 'P2到访', 'P3交定', 'P4签约'] },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: dates, axisLabel: { rotate: 30, fontSize: 11 } },
+        yAxis: { type: 'value' },
+        series: [
+          { name: 'P1线索', type: 'line', data: d.trend.map(t => t.p1), smooth: true, itemStyle: { color: '#1677ff' } },
+          { name: 'P2到访', type: 'line', data: d.trend.map(t => t.p2), smooth: true, itemStyle: { color: '#722ed1' } },
+          { name: 'P3交定', type: 'line', data: d.trend.map(t => t.p3), smooth: true, itemStyle: { color: '#fa8c16' } },
+          { name: 'P4签约', type: 'line', data: d.trend.map(t => t.p4), smooth: true, itemStyle: { color: '#52c41a' } },
+        ]
+      });
+    });
+}
+
+function loadTopRankings() {
+  const params = new URLSearchParams(getFilterParams());
+  fetch('/api/stats/top?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      const renderList = (items, fields) => items.map((x, i) =>
+        `<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid #f5f5f5">
+          <span style="width:20px;height:20px;border-radius:50%;background:${i < 3 ? ['#fa8c16','#1677ff','#52c41a'][i] : '#f0f0f0'};color:${i < 3 ? '#fff' : '#999'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;margin-right:8px">${i + 1}</span>
+          <span style="flex:1;font-size:13px">${x[fields[0]]}${x[fields[1]] ? ' (' + x[fields[1]] + ')' : ''}</span>
+          <span style="font-size:13px;font-weight:600;color:#52c41a">签${x.signed}</span>
+        </div>`
+      ).join('');
+      document.getElementById('topStores').innerHTML = renderList(d.topStores, ['name', 'city']);
+      document.getElementById('topAgents').innerHTML = renderList(d.topAgents, ['name', 'store']);
+      document.getElementById('topChannels').innerHTML = renderList(d.topChannels, ['channel', '']);
+    });
+}
+
+// ============ ANALYSIS ============
+function loadAnalysis() {
+  const params = new URLSearchParams(getFilterParams());
+  fetch('/api/stats/analysis?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      if (d.error) return;
+      renderAnalysisKPIs(d);
+      loadProfileCharts();
+      renderHighValue(d.highValue);
+      renderChurnRisk(d.churnRisk);
+      renderSuggestions(d.suggestions);
+    });
+}
+
+function renderAnalysisKPIs(d) {
+  const s = d.summary;
+  document.getElementById('analysisKpi').innerHTML = `
+    <div class="kpi-card"><div class="label">高价值客户</div><div class="value" style="color:#52c41a">${s.highValueCount}</div><div class="sub">A级+已签约+P3</div></div>
+    <div class="kpi-card"><div class="label">流失风险</div><div class="value" style="color:#ff4d4f">${s.churnRiskCount}</div><div class="sub">D级+C级P1</div></div>
+    <div class="kpi-card"><div class="label">待跟进</div><div class="value" style="color:#faad14">${s.needFollowUpCount}</div><div class="sub">B/C级+低需求</div></div>
+    <div class="kpi-card"><div class="label">整体转化率</div><div class="value" style="color:#1677ff">${s.overallRate}%</div><div class="sub">流失率${s.churnRate}%</div></div>
+    <div class="kpi-card"><div class="label">跟进效率</div><div class="value">${s.avgFollowup}</div><div class="sub">次/客户 · 零跟进${s.noFollowupRate}%</div></div>
+  `;
+}
+
+function loadProfileCharts() {
+  const params = new URLSearchParams(getFilterParams());
+  fetch('/api/stats/customer-profile?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      // Rating pie
+      renderPie('chartRatingDist', d.ratingDist, 'rating', { title: '客户评级分布' });
+      // Objection
+      renderPie('chartObjection', d.objectionDist, 'objection', { title: '客户抗性分析' });
+      // Budget bar
+      renderBar('chartBudget', d.budgetDist, 'budget', '预算分布');
+      // Unit type
+      renderBar('chartUnitType', d.unitTypeDist, 'unit_type', '意向户型分布');
+    });
+}
+
+function renderPie(elId, data, field, opt) {
+  const el = document.getElementById(elId);
+  if (charts[elId]) charts[elId].dispose();
+  charts[elId] = echarts.init(el);
+  charts[elId].setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, type: 'scroll' },
+    series: [{
+      type: 'pie', radius: ['35%', '60%'], center: ['50%', '45%'],
+      label: { formatter: '{b}\n{c}', fontSize: 12 },
+      data: data.map(d => ({ name: d[field] || '未填写', value: d.c }))
+    }]
+  });
+}
+
+function renderBar(elId, data, field, title) {
+  const el = document.getElementById(elId);
+  if (charts[elId]) charts[elId].dispose();
+  charts[elId] = echarts.init(el);
+  charts[elId].setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: data.map(d => d[field] || '未填'), axisLabel: { rotate: 25, fontSize: 11 } },
+    yAxis: { type: 'value' },
+    series: [{ type: 'bar', data: data.map(d => d.c), barWidth: '50%', itemStyle: { color: '#1677ff' }, label: { show: true, position: 'top', fontSize: 11 } }]
+  });
+}
+
+function renderHighValue(customers) {
+  const el = document.getElementById('highValueCards');
+  if (!customers.length) { el.innerHTML = '<div class="empty">暂无高价值客户</div>'; return; }
+  el.innerHTML = customers.map(c => {
+    const score = calcValueScore(c);
+    return `<div class="cust-card">
+      <div class="name">${esc(c.customer_name)} <span class="rating-tag ${ratingClass(c.rating)}">${esc(c.rating || '未评级')}</span></div>
+      <div class="meta">${esc(c.agent_name)} · ${esc(c.store_name)} · ${c.level}</div>
+      <div class="meta">渠道: ${esc(c.channel||'-')} | 预算: ${esc(c.budget||'-')} | 跟进${c.fu_count}次</div>
+      ${c.reception_notes ? `<div class="meta" style="margin-top:4px;color:#595959">${esc(c.reception_notes.slice(0,80))}${c.reception_notes.length > 80 ? '...' : ''}</div>` : ''}
+      <div class="score-bar"><div class="score-fill" style="width:${score}%;background:${score >= 80 ? '#52c41a' : score >= 60 ? '#1677ff' : '#fa8c16'}"></div></div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">价值评分: ${score}/100</div>
+    </div>`;
+  }).join('');
+}
+
+function renderChurnRisk(customers) {
+  const el = document.getElementById('churnRiskCards');
+  if (!customers.length) { el.innerHTML = '<div class="empty">暂无流失风险客户</div>'; return; }
+  el.innerHTML = customers.map(c => {
+    const score = calcRiskScore(c);
+    return `<div class="cust-card">
+      <div class="name">${esc(c.customer_name)} <span class="rating-tag ${ratingClass(c.rating)}">${esc(c.rating || '未评级')}</span></div>
+      <div class="meta">${esc(c.agent_name)} · ${esc(c.store_name)} · ${c.level}</div>
+      <div class="meta">抗性: ${esc(c.objection||'-')} | 跟进${c.fu_count}次 | ${esc(c.add_date||'')}</div>
+      ${c.followup_notes ? `<div class="meta" style="margin-top:4px;color:#595959">回访: ${esc(c.followup_notes.slice(0,60))}</div>` : ''}
+      <div class="score-bar"><div class="score-fill" style="width:${score}%;background:${score >= 70 ? '#ff4d4f' : '#faad14'}"></div></div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">风险评分: ${score}/100</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSuggestions(suggestions) {
+  const el = document.getElementById('suggestionList');
+  if (!suggestions.length) { el.innerHTML = '<div class="empty">暂无优化建议</div>'; return; }
+  el.innerHTML = suggestions.map(s =>
+    `<div class="suggestion-item ${s.priority}">
+      <div class="title"><span class="priority ${s.priority}">${s.priority === 'high' ? '高' : s.priority === 'medium' ? '中' : '低'}</span>${esc(s.title)}</div>
+      <div class="detail">${esc(s.detail)}</div>
+    </div>`
+  ).join('');
+}
+
+function calcValueScore(c) {
+  let score = 0;
+  if (c.rating === '已签约') score += 40;
+  else if (c.rating && c.rating.startsWith('A')) score += 35;
+  if (c.level === 'P4') score += 30;
+  else if (c.level === 'P3') score += 25;
+  else if (c.level === 'P2') score += 15;
+  score += Math.min(c.fu_count * 5, 20);
+  if (c.channel && ['转介绍', '贝壳'].includes(c.channel)) score += 10;
+  return Math.min(score, 100);
+}
+
+function calcRiskScore(c) {
+  let score = 0;
+  if (c.rating === 'D:已流失') score += 50;
+  else if (c.rating && c.rating.startsWith('C')) score += 35;
+  if (c.fu_count === 0) score += 30;
+  else if (c.fu_count === 1) score += 15;
+  if (c.objection === '已租其他') score += 20;
+  else if (c.objection === '预算不足') score += 15;
+  if (c.level === 'P1') score += 10;
+  return Math.min(score, 100);
+}
+
+// ============ CUSTOMER LIST ============
+function loadCustomers() {
+  const params = new URLSearchParams(getFilterParams());
+  const level = document.getElementById('filterLevel').value;
+  const rating = document.getElementById('filterRating').value;
+  const search = document.getElementById('searchInput').value;
+  if (level) params.set('level', level);
+  if (rating) params.set('rating', rating);
+  if (search) params.set('search', search);
+  params.set('page', currentPage);
+  params.set('limit', pageSize);
+  fetch('/api/customers?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      if (d.error) return;
+      const tbody = document.getElementById('custTbody');
+      tbody.innerHTML = d.customers.map(c => `<tr>
+        <td>${esc((c.add_date || '').slice(5))}</td>
+        <td><span class="level-tag ${c.level.toLowerCase()}">${c.level}</span></td>
+        <td>${esc(c.customer_name || '-')}</td>
+        <td>${esc(c.agent_name || '-')}</td>
+        <td>${esc(c.store_name || '-')}</td>
+        <td>${esc(c.channel || '-')}</td>
+        <td>${esc(c.unit_type || '-')}</td>
+        <td>${esc(c.budget || '-')}</td>
+        <td>${c.rating ? `<span class="rating-tag ${ratingClass(c.rating)}">${esc(c.rating)}</span>` : '-'}</td>
+        <td>${esc(c.objection || '-')}</td>
+        <td>${c.followup_count}</td>
+        <td>
+          <button class="btn-sm" onclick="openFollowup(${c.id})">跟进</button>
+          <button class="btn-sm" onclick="openStage(${c.id}, '${esc(c.customer_name)}', '${c.level}')">推进</button>
+          <button class="btn-sm" onclick="openEdit(${c.id})">编辑</button>
+          ${userRole !== 'agent' ? `<button class="btn-sm danger" onclick="deleteCust(${c.id})">删除</button>` : ''}
+        </td>
+      </tr>`).join('');
+      document.getElementById('custPage').textContent = `共 ${d.total} 条，第 ${d.page}/${Math.ceil(d.total / d.limit)} 页`;
+    });
+}
+
+// ============ ADD/EDIT CUSTOMER ============
+function openAddModal() {
+  document.getElementById('custModalTitle').textContent = '新增客户';
+  document.getElementById('editCustId').value = '';
+  document.getElementById('fAddDate').value = new Date().toISOString().slice(0, 10);
+  ['fLevel','fDemo','fAge','fDuration','fChannel','fUnit','fObjection','fLeaseTerm','fMoveIn','fRating'].forEach(id => document.getElementById(id).value = '');
+  ['fName','fWorkArea','fBudget','fDiscount','fNotes','fStore','fAgent'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fLevel').value = 'P1';
+  document.getElementById('custModal').classList.add('show');
+}
+
+function openEdit(id) {
+  fetch(`/api/customers?limit=1000`, { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      const c = d.customers.find(x => x.id === id);
+      if (!c) return;
+      document.getElementById('custModalTitle').textContent = '编辑客户';
+      document.getElementById('editCustId').value = id;
+      document.getElementById('fAddDate').value = c.add_date || '';
+      document.getElementById('fLevel').value = c.level || 'P1';
+      document.getElementById('fStore').value = c.store_name || '';
+      document.getElementById('fAgent').value = c.agent_name || '';
+      document.getElementById('fName').value = c.customer_name || '';
+      document.getElementById('fDemo').value = c.demographic || '';
+      document.getElementById('fAge').value = c.age_range || '';
+      document.getElementById('fDuration').value = c.reception_duration || '';
+      document.getElementById('fChannel').value = c.channel || '';
+      document.getElementById('fWorkArea').value = c.work_area || '';
+      document.getElementById('fUnit').value = c.unit_type || '';
+      document.getElementById('fBudget').value = c.budget || '';
+      document.getElementById('fObjection').value = c.objection || '';
+      document.getElementById('fLeaseTerm').value = c.lease_term || '';
+      document.getElementById('fMoveIn').value = c.move_in_time || '';
+      document.getElementById('fRating').value = c.rating || '';
+      document.getElementById('fDiscount').value = c.discount_info || '';
+      document.getElementById('fNotes').value = c.reception_notes || '';
+      document.getElementById('custModal').classList.add('show');
+    });
+}
+
+function saveCustomer() {
+  const id = document.getElementById('editCustId').value;
+  const body = {
+    add_date: document.getElementById('fAddDate').value,
+    level: document.getElementById('fLevel').value,
+    store_name: document.getElementById('fStore').value.trim(),
+    agent_name: document.getElementById('fAgent').value.trim(),
+    customer_name: document.getElementById('fName').value,
+    demographic: document.getElementById('fDemo').value,
+    age_range: document.getElementById('fAge').value,
+    reception_duration: document.getElementById('fDuration').value,
+    channel: document.getElementById('fChannel').value,
+    work_area: document.getElementById('fWorkArea').value,
+    unit_type: document.getElementById('fUnit').value,
+    budget: document.getElementById('fBudget').value,
+    objection: document.getElementById('fObjection').value,
+    lease_term: document.getElementById('fLeaseTerm').value,
+    move_in_time: document.getElementById('fMoveIn').value,
+    rating: document.getElementById('fRating').value,
+    discount_info: document.getElementById('fDiscount').value,
+    reception_notes: document.getElementById('fNotes').value,
+  };
+  if (!body.customer_name) { alert('请填写客户名称'); return; }
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? `/api/customers/${id}` : '/api/customers';
+  fetch(url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) })
+    .then(r => r.json()).then(d => {
+      if (d.error) { alert(d.error); return; }
+      closeModal('custModal');
+      loadCustomers();
+      alert(id ? '更新成功' : '新增成功');
+    });
+}
+
+function deleteCust(id) {
+  if (!confirm('确认删除该客户？此操作不可撤销。')) return;
+  fetch(`/api/customers/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => { if (d.error) { alert(d.error); return; } loadCustomers(); alert('删除成功'); });
+}
+
+// ============ FOLLOW-UP ============
+function openFollowup(cid) {
+  document.getElementById('fuCustId').value = cid;
+  fetch(`/api/customers/${cid}/followups`, { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.json()).then(d => {
+      fetch(`/api/customers?limit=1000`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json()).then(cd => {
+          const c = cd.customers.find(x => x.id === cid);
+          if (c) {
+            document.getElementById('fuCustomerInfo').innerHTML =
+              `<b>${esc(c.customer_name)}</b> · ${esc(c.agent_name)} · ${esc(c.store_name)} · <span class="level-tag ${c.level.toLowerCase()}">${c.level}</span> ${c.rating ? `<span class="rating-tag ${ratingClass(c.rating)}">${esc(c.rating)}</span>` : ''}`;
+          }
+        });
+      const tl = document.getElementById('fuTimeline');
+      if (!d.followups.length) {
+        tl.innerHTML = '<div class="empty">暂无跟进记录</div>';
+      } else {
+        tl.innerHTML = d.followups.map(f => `<div class="fu-item">
+          <div class="fu-meta">${esc(f.created_at)} · ${esc(f.agent_name || '?')} · ${typeLabel(f.followup_type)}${f.next_action ? ' · 下一步: ' + esc(f.next_action) : ''}</div>
+          <div class="fu-content">${esc(f.content)}</div>
+        </div>`).join('');
+      }
+      document.getElementById('fuContent').value = '';
+      document.getElementById('fuType').value = 'phone';
+      document.getElementById('fuNext').value = '';
+      document.getElementById('fuModal').classList.add('show');
+    });
+}
+
+function saveFollowup() {
+  const cid = document.getElementById('fuCustId').value;
+  const content = document.getElementById('fuContent').value;
+  if (!content) { alert('请填写跟进内容'); return; }
+  fetch(`/api/customers/${cid}/followups`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      content, followup_type: document.getElementById('fuType').value,
+      next_action: document.getElementById('fuNext').value
+    })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    alert('跟进记录已添加');
+    openFollowup(cid); // Reload
+  });
+}
+
+// ============ STAGE ADVANCE ============
+function openStage(cid, name, currentLevel) {
+  document.getElementById('stageCustId').value = cid;
+  document.getElementById('stageInfo').innerHTML = `<b>${esc(name)}</b> · 当前阶段: <span class="level-tag ${currentLevel.toLowerCase()}">${currentLevel}</span>`;
+  const sel = document.getElementById('stageTarget');
+  const levels = ['P1', 'P2', 'P3', 'P4'];
+  const idx = levels.indexOf(currentLevel);
+  sel.innerHTML = levels.slice(idx + 1).map(l => `<option value="${l}">${l}</option>`).join('');
+  document.getElementById('stageNote').value = '';
+  if (!sel.options.length) { sel.innerHTML = '<option value="">已到最终阶段</option>'; }
+  document.getElementById('stageModal').classList.add('show');
+}
+
+function advanceStage() {
+  const cid = document.getElementById('stageCustId').value;
+  const stage = document.getElementById('stageTarget').value;
+  const note = document.getElementById('stageNote').value;
+  if (!stage) { alert('无法推进'); return; }
+  fetch(`/api/customers/${cid}/stage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ stage, note })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    closeModal('stageModal');
+    loadCustomers();
+    alert(`已推进至 ${stage}`);
+  });
+}
+
+// ============ HELPERS ============
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function esc(s) { return s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function ratingClass(r) {
+  if (!r) return '';
+  if (r.startsWith('A')) return 'a';
+  if (r.startsWith('B')) return 'b';
+  if (r.startsWith('C')) return 'c';
+  if (r.startsWith('D')) return 'd';
+  if (r === '已签约') return 'signed';
+  return '';
+}
+function typeLabel(t) {
+  const m = { phone: '电话', wechat: '微信', visit: '到店', other: '其他' };
+  return m[t] || t || '电话';
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => {
+    if (e.target === o) {
+      o.classList.remove('show');
+      if (o.id === 'regModal') o.style.display = 'none';
+    }
+  });
+});
+
+// Window resize
+window.addEventListener('resize', () => {
+  Object.values(charts).forEach(c => c && c.resize());
+});
+</script>
+</body>
+</html>
