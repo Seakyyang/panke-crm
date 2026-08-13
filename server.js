@@ -1020,6 +1020,18 @@ app.get('/api/stats/analysis', auth, async (req, res) => {
 });
 
 // ==================== HEALTH ====================
+app.get('/health', async (req, res) => {
+  if (!dbReady) {
+    return res.status(503).json({ ok: false, status: 'starting', db: false });
+  }
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, db: true, time: new Date().toISOString() });
+  } catch (e) {
+    res.status(503).json({ ok: false, status: 'db_error', db: false, error: e.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
@@ -1030,16 +1042,62 @@ app.use((req, res) => {
 });
 
 // ==================== STARTUP ====================
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function connectWithRetry(maxRetries = 10) {
+  for (let i = 1; i <= maxRetries; i++) {
+    try {
+      console.log(`[DB] 连接尝试 ${i}/${maxRetries}...`);
+      const result = await pool.query('SELECT 1 as ok');
+      if (result.rows[0].ok === 1) {
+        console.log('[DB] 连接成功');
+        return true;
+      }
+    } catch (e) {
+      console.error(`[DB] 连接失败 ${i}/${maxRetries}:`, e.message);
+      if (i === maxRetries) throw e;
+      const waitSec = Math.min(i * 2, 10);
+      console.log(`[DB] 等待 ${waitSec} 秒后重试...`);
+      await sleep(waitSec * 1000);
+    }
+  }
+  return false;
+}
+
+let dbReady = false;
+
 async function start() {
+  console.log('[START] 服务启动中...');
+  console.log(`[START] PORT=${PORT}`);
+  console.log(`[START] DATABASE_URL=${process.env.DATABASE_URL ? '已配置' : '未配置'}`);
+
+  // 先启动 HTTP 监听，这样 Railway 不会因 "Application failed to respond" 判定失败
+  const server = app.listen(PORT, () => {
+    console.log(`[HTTP] 监听端口 ${PORT}`);
+  });
+
+  // 数据库连接重试
   try {
+    await connectWithRetry(10);
+    console.log('[DB] 初始化 schema...');
     await initSchema();
+    console.log('[DB] 检查 seed 数据...');
     await seed();
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
+    dbReady = true;
+    console.log('[START] 服务就绪 (DB ready)');
   } catch (e) {
-    console.error('Startup error:', e.message);
-    process.exit(1);
+    console.error('[START] 数据库初始化失败 (但 HTTP 仍在线):', e.message);
+    console.error('[START] 健康检查端点 /health 会返回 503，部署可能判定失败');
+  }
+
+  // 优雅退出
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, async () => {
+      console.log(`[EXIT] 收到 ${sig} 信号，关闭中...`);
+      server.close();
+      try { await pool.end(); } catch (e) {}
+      process.exit(0);
+    });
   }
 }
 
