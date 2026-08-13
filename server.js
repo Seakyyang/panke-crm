@@ -412,6 +412,25 @@ app.get('/api/auth/verify', auth, (req, res) => {
   });
 });
 
+// 修改密码 (所有已登录用户)
+app.post('/api/auth/change-password', auth, async (req, res) => {
+  try {
+    const { old_password, new_password } = req.body;
+    if (!old_password || !new_password) return res.status(400).json({ error: '请填写旧密码和新密码' });
+    if (new_password.length < 6) return res.status(400).json({ error: '新密码至少6位' });
+
+    const oldHash = hashPassword(old_password);
+    if (oldHash !== req.user.password_hash) return res.status(401).json({ error: '旧密码错误' });
+
+    const newHash = hashPassword(new_password);
+    await q('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.id]);
+    res.json({ token: newHash, message: '密码修改成功' });
+  } catch (e) {
+    console.error('Change password error:', e.message);
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
 // ==================== API: ADMIN - USER APPROVAL ====================
 // 获取待审核用户列表 (仅 admin)
 app.get('/api/admin/pending-users', auth, async (req, res) => {
