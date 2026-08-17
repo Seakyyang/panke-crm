@@ -747,7 +747,12 @@ app.post('/api/customers', auth, async (req, res) => {
     }
     if (!storeId) return res.status(400).json({ error: '缺少门店信息' });
     if (!agentId && b.agent_name) {
-      let ag = await qGet('SELECT id, store_id FROM agents WHERE name = ?', [b.agent_name]);
+      // 优先按 store_id + name 精确匹配
+      let ag = await qGet('SELECT id, store_id FROM agents WHERE store_id = ? AND name = ?', [storeId, b.agent_name]);
+      if (!ag) {
+        // 兜底按 name 全局查
+        ag = await qGet('SELECT id, store_id FROM agents WHERE name = ? LIMIT 1', [b.agent_name]);
+      }
       if (ag) {
         agentId = ag.id;
         if (!storeId) storeId = ag.store_id;
@@ -809,7 +814,7 @@ app.put('/api/customers/:id', auth, async (req, res) => {
     });
 
     let newStoreId = cust.store_id;
-    if (b.store_name) {
+    if (b.store_name && req.user.role === 'admin') {
       let store = await qGet('SELECT id FROM stores WHERE name = ?', [b.store_name]);
       if (!store) {
         const city = b.store_name.startsWith('深圳') ? '深圳' : b.store_name.startsWith('广州') ? '广州' : '其他';
@@ -820,11 +825,25 @@ app.put('/api/customers/:id', auth, async (req, res) => {
       updates.push('store_id = ?'); params.push(newStoreId);
     }
     if (b.agent_name) {
-      let ag = await qGet('SELECT id FROM agents WHERE name = ?', [b.agent_name]);
-      if (!ag) {
-        ag = { id: await qInsert('INSERT INTO agents (name, store_id, role) VALUES (?,?,?) RETURNING id', [b.agent_name, newStoreId, 'agent']) };
+      // agent 角色员工不能把客户转给其他运营官（避免越权）
+      if (req.user.role === 'agent') {
+        // 强制设为自己
+        updates.push('agent_id = ?'); params.push(req.user.agent_id);
+      } else {
+        // 优先按 store_id + name 精确匹配（避免多门店同名运营官错配）
+        let ag = await qGet('SELECT id FROM agents WHERE store_id = ? AND name = ?', [newStoreId, b.agent_name]);
+        if (!ag) {
+          // 兜底：按 name 全局查（兼容历史数据：员工可能没在系统里登记）
+          ag = await qGet('SELECT id FROM agents WHERE name = ? LIMIT 1', [b.agent_name]);
+        }
+        if (!ag) {
+          ag = { id: await qInsert('INSERT INTO agents (name, store_id, role) VALUES (?,?,?) RETURNING id', [b.agent_name, newStoreId, 'agent']) };
+        }
+        updates.push('agent_id = ?'); params.push(ag.id);
       }
-      updates.push('agent_id = ?'); params.push(ag.id);
+    } else if (req.user.role === 'agent') {
+      // agent 角色没填运营官名字时，强制设为自己（与 POST 行为一致）
+      updates.push('agent_id = ?'); params.push(req.user.agent_id);
     }
     updates.push(`updated_at = NOW()`);
 
