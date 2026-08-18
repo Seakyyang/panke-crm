@@ -814,7 +814,7 @@ function switchTab(name) {
 function loadDashboard() {
   const params = new URLSearchParams(getFilterParams());
   const url = '/api/stats/overview?' + params.toString();
-  fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
     .then(r => r.json()).then(d => {
       if (d.error) return;
       renderKPIs(d);
@@ -1126,7 +1126,7 @@ function loadCustomers() {
   if (search) params.set('search', search);
   params.set('page', currentPage);
   params.set('limit', pageSize);
-  fetch('/api/customers?' + params.toString(), { headers: { Authorization: `Bearer ${token}` } })
+  fetch('/api/customers?' + params.toString(), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
     .then(r => r.json()).then(d => {
       if (d.error) return;
       const tbody = document.getElementById('custTbody');
