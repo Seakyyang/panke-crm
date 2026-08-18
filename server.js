@@ -17,7 +17,14 @@ app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   next();
 });
-app.use(express.static(path.join(__dirname, 'public')));
+// 静态文件：HTML 每次向服务器校验是否更新（防止同事浏览器一直用旧版页面代码）
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  }
+}));
 
 // ==================== DATABASE ====================
 const pool = new Pool({
