@@ -12,6 +12,11 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(express.json({ limit: '5mb' }));
+// 所有 API 响应禁止浏览器缓存（防止前端拿到旧数据）
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==================== DATABASE ====================
@@ -727,10 +732,11 @@ app.post('/api/customers', auth, async (req, res) => {
     let agentId = b.agent_id;
     if (req.user.role === 'agent') {
       storeId = req.user.store_id;
-      agentId = req.user.agent_id;
+      // 员工指定了运营官姓名时，让后续 agent_name 查找逻辑生效；未指定才默认自己
+      if (!agentId && !b.agent_name) agentId = req.user.agent_id;
     } else if (req.user.role === 'manager') {
       storeId = req.user.store_id;
-      if (!agentId) agentId = req.user.agent_id;
+      if (!agentId && !b.agent_name) agentId = req.user.agent_id;
     }
     if (agentId && !storeId) {
       const ag = await qGet('SELECT store_id FROM agents WHERE id = ?', [agentId]);
@@ -825,25 +831,16 @@ app.put('/api/customers/:id', auth, async (req, res) => {
       updates.push('store_id = ?'); params.push(newStoreId);
     }
     if (b.agent_name) {
-      // agent 角色员工不能把客户转给其他运营官（避免越权）
-      if (req.user.role === 'agent') {
-        // 强制设为自己
-        updates.push('agent_id = ?'); params.push(req.user.agent_id);
-      } else {
-        // 优先按 store_id + name 精确匹配（避免多门店同名运营官错配）
-        let ag = await qGet('SELECT id FROM agents WHERE store_id = ? AND name = ?', [newStoreId, b.agent_name]);
-        if (!ag) {
-          // 兜底：按 name 全局查（兼容历史数据：员工可能没在系统里登记）
-          ag = await qGet('SELECT id FROM agents WHERE name = ? LIMIT 1', [b.agent_name]);
-        }
-        if (!ag) {
-          ag = { id: await qInsert('INSERT INTO agents (name, store_id, role) VALUES (?,?,?) RETURNING id', [b.agent_name, newStoreId, 'agent']) };
-        }
-        updates.push('agent_id = ?'); params.push(ag.id);
+      // 所有角色均可修改运营官；优先按 store_id + name 精确匹配，兜底全局 name，最后新建
+      let ag = await qGet('SELECT id FROM agents WHERE store_id = ? AND name = ?', [newStoreId, b.agent_name]);
+      if (!ag) {
+        ag = await qGet('SELECT id FROM agents WHERE name = ? LIMIT 1', [b.agent_name]);
       }
-    } else if (req.user.role === 'agent') {
-      // agent 角色没填运营官名字时，强制设为自己（与 POST 行为一致）
-      updates.push('agent_id = ?'); params.push(req.user.agent_id);
+      if (!ag) {
+        ag = { id: await qInsert('INSERT INTO agents (name, store_id, role) VALUES (?,?,?) RETURNING id', [b.agent_name, newStoreId, 'agent']) };
+      }
+      updates.push('agent_id = ?'); params.push(ag.id);
+      console.log(`[PUT customer ${cid}] agent_name="${b.agent_name}" -> agent_id=${ag.id}`);
     }
     updates.push(`updated_at = NOW()`);
 
