@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>华南C3营销协同平台·盘客云销</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <style>
@@ -1220,14 +1223,16 @@ function saveCustomer() {
       if (d.error) { alert(d.error); return; }
       closeModal('custModal');
       loadCustomers();
+      loadDashboard();
       alert(id ? '更新成功' : '新增成功');
-    });
+    }).catch(e => alert('操作失败：网络错误'));
 }
 
 function deleteCust(id) {
   if (!confirm('确认删除该客户？此操作不可撤销。')) return;
   fetch(`/api/customers/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-    .then(r => r.json()).then(d => { if (d.error) { alert(d.error); return; } loadCustomers(); alert('删除成功'); });
+    .then(r => r.json()).then(d => { if (d.error) { alert(d.error); return; } loadCustomers(); loadDashboard(); alert('删除成功'); })
+    .catch(e => alert('删除失败：网络错误'));
 }
 
 // ============ FOLLOW-UP ============
@@ -1272,8 +1277,10 @@ function saveFollowup() {
   }).then(r => r.json()).then(d => {
     if (d.error) { alert(d.error); return; }
     alert('跟进记录已添加');
-    openFollowup(cid); // Reload
-  });
+    openFollowup(cid);
+    loadCustomers();
+    loadDashboard();
+  }).catch(e => alert('添加跟进失败：网络错误'));
 }
 
 // ============ STAGE ADVANCE ============
@@ -1301,8 +1308,9 @@ function advanceStage() {
     if (d.error) { alert(d.error); return; }
     closeModal('stageModal');
     loadCustomers();
+    loadDashboard();
     alert(`已推进至 ${stage}`);
-  });
+  }).catch(e => alert('推进失败：网络错误'));
 }
 
 // ============ HELPERS ============
