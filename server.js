@@ -418,6 +418,7 @@ app.get('/api/auth/verify', auth, (req, res) => {
   res.json({
     role: req.user.role,
     username: req.user.username,
+    agentId: req.user.agent_id,
     agentName: req.user.agent_name,
     storeName: req.user.store_name,
     storeId: req.user.store_id,
@@ -739,8 +740,12 @@ app.post('/api/customers', auth, async (req, res) => {
     let agentId = b.agent_id;
     if (req.user.role === 'agent') {
       storeId = req.user.store_id;
-      // 员工指定了运营官姓名时，让后续 agent_name 查找逻辑生效；未指定才默认自己
-      if (!agentId && !b.agent_name) agentId = req.user.agent_id;
+      // 运营官自己录入客户时，强制锁定为自己账号的 agent_id，
+      // 不再用前端填的 agent_name 重新解析——避免"运营官自己录入但看板看不到自己的客户"
+      if (req.user.agent_id) {
+        agentId = req.user.agent_id;
+        b.agent_name = null;
+      }
     } else if (req.user.role === 'manager') {
       storeId = req.user.store_id;
       if (!agentId && !b.agent_name) agentId = req.user.agent_id;
