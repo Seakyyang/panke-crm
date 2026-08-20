@@ -60,6 +60,11 @@ function hashPassword(pw) {
   return crypto.createHash('sha256').update(pw).digest('hex');
 }
 
+// 生成随机登录 token，避免不同用户密码相同时 token 冲突
+function genToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
 // ==================== SCHEMA INIT ====================
 async function initSchema() {
   await pool.query(`
@@ -127,6 +132,9 @@ async function initSchema() {
     -- 用户审核状态字段：approved(已通过) / pending(待审核) / rejected(已拒绝)
     ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'approved';
     CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+    -- 登录 token 列：每个用户独立的随机 token，避免相同密码导致 token 冲突
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS token TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token) WHERE token IS NOT NULL;
   `);
 }
 
@@ -309,14 +317,24 @@ async function auth(req, res, next) {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ error: '未登录' });
+    // 按 token 反查用户（token 是登录时生成的随机值，不会冲突）
+    // 兼容老版本：如果用户还没有 token（旧账号），仍允许按 password_hash 查
     const user = await qGet(`
       SELECT u.*, a.name as agent_name, s.name as store_name
       FROM users u
       LEFT JOIN agents a ON u.agent_id = a.id
       LEFT JOIN stores s ON u.store_id = s.id
-      WHERE u.password_hash = ? AND u.status = 'approved'
-    `, [token]);
+      WHERE (u.token = ? OR u.password_hash = ?) AND u.status = 'approved'
+      ORDER BY (u.token IS NOT NULL) DESC, u.id ASC
+      LIMIT 1
+    `, [token, token]);
     if (!user) return res.status(401).json({ error: 'Token无效或账号未审核' });
+    // 老用户首次用旧 token 登录，立刻补上独立 token，避免下次冲突
+    if (!user.token) {
+      const newToken = genToken();
+      await q('UPDATE users SET token = ? WHERE id = ?', [newToken, user.id]);
+      user.token = newToken;
+    }
     req.user = user;
     next();
   } catch (e) {
@@ -349,8 +367,11 @@ app.post('/api/auth/login', async (req, res) => {
     if (user.status === 'pending') return res.status(403).json({ error: '账号待管理员审核，请稍后再试或联系管理员' });
     if (user.status === 'rejected') return res.status(403).json({ error: '账号已被拒绝，请联系管理员' });
     if (user.status === 'disabled') return res.status(403).json({ error: '账号已被禁用，请联系管理员' });
+    // 生成独立的随机 token（不再用 password_hash 当 token，避免相同密码冲突）
+    const token = genToken();
+    await q('UPDATE users SET token = ? WHERE id = ?', [token, user.id]);
     res.json({
-      token: hash,
+      token,
       role: user.role,
       username: user.username,
       agentName: user.agent_name,
@@ -436,8 +457,9 @@ app.post('/api/auth/change-password', auth, async (req, res) => {
     if (oldHash !== req.user.password_hash) return res.status(401).json({ error: '旧密码错误' });
 
     const newHash = hashPassword(new_password);
-    await q('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.id]);
-    res.json({ token: newHash, message: '密码修改成功' });
+    const newToken = genToken();
+    await q('UPDATE users SET password_hash = ?, token = ? WHERE id = ?', [newHash, newToken, req.user.id]);
+    res.json({ token: newToken, message: '密码修改成功' });
   } catch (e) {
     console.error('Change password error:', e.message);
     res.status(500).json({ error: '服务器错误' });
