@@ -1400,7 +1400,27 @@ app.get('/api/diag/resetpw', async (req, res) => {
     const newPw = req.query.p || 'admin123';
     const hash = hashPassword(newPw);
     const r = await q('UPDATE users SET password_hash = ?, token = NULL WHERE username = ?', [hash, username]);
-    res.json({ success: r.rowCount > 0, username, newPassword: newPw, rowsAffected: r.rowCount });
+    res.json({ success: r.rowCount > 0, username, newPassword: newPw, rowsAffected: r.rowCount, hashPreview: hash.slice(0, 8) });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
+// 临时 hash 查看端点（仅供诊断，验证后删除）
+app.get('/api/diag/hashcheck', async (req, res) => {
+  try {
+    const username = req.query.u || 'admin';
+    const user = await qGet('SELECT username, password_hash, (token IS NOT NULL) as has_token FROM users WHERE username = ?', [username]);
+    if (!user) { res.json({ found: false }); return; }
+    const expectedHash = hashPassword('admin123');
+    res.json({
+      found: true,
+      username: user.username,
+      storedHashPreview: user.password_hash?.slice(0, 8),
+      expectedHashPreview: expectedHash.slice(0, 8),
+      hashMatches: user.password_hash === expectedHash,
+      hasToken: user.has_token,
+    });
   } catch(e) {
     res.json({ error: e.message });
   }
