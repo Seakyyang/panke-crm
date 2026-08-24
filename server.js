@@ -538,6 +538,22 @@ app.post('/api/admin/disable-user', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 重置用户密码 (仅 admin)
+app.post('/api/admin/reset-password', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '仅管理员可访问' });
+    const { user_id, new_password } = req.body;
+    if (!user_id || !new_password) return res.status(400).json({ error: '缺少 user_id 或 new_password' });
+    if (String(new_password).length < 6) return res.status(400).json({ error: '新密码至少 6 位' });
+    const target = await qGet('SELECT id, username, role FROM users WHERE id = ?', [user_id]);
+    if (!target) return res.status(404).json({ error: '用户不存在' });
+    if (target.role === 'admin') return res.status(400).json({ error: '不能重置管理员账号密码' });
+    // 更新密码并重置 token，强制该用户重新登录
+    await q('UPDATE users SET password_hash = ?, token = ? WHERE id = ?', [hashPassword(String(new_password)), genToken(), user_id]);
+    res.json({ message: `已重置 ${target.username} 的密码` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ==================== API: EXPORT (仅 admin) ====================
 // 导出所有客户数据为 CSV
 app.get('/api/export/customers', auth, async (req, res) => {
