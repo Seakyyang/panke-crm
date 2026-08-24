@@ -1391,6 +1391,21 @@ app.get('/api/diag/checkpw', async (req, res) => {
   }
 });
 
+// 临时密码重置端点（仅供诊断，验证后删除）
+app.get('/api/diag/resetpw', async (req, res) => {
+  try {
+    const key = req.query.k || '';
+    if (key !== 'panke2026reset') return res.status(403).json({ error: '无权限' });
+    const username = req.query.u || 'admin';
+    const newPw = req.query.p || 'admin123';
+    const hash = hashPassword(newPw);
+    const r = await q('UPDATE users SET password_hash = ?, token = NULL WHERE username = ?', [hash, username]);
+    res.json({ success: r.rowCount > 0, username, newPassword: newPw, rowsAffected: r.rowCount });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
 // SPA fallback
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
