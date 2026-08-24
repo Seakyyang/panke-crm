@@ -1426,6 +1426,33 @@ app.get('/api/diag/hashcheck', async (req, res) => {
   }
 });
 
+// 临时详细密码验证端点
+app.get('/api/diag/checkpw2', async (req, res) => {
+  try {
+    const username = req.query.u || 'admin';
+    const pw = req.query.p || 'admin123';
+    const hash = hashPassword(pw);
+    // 先按 username 查
+    const user = await qGet('SELECT id, username, role, status, password_hash FROM users WHERE username = ?', [username]);
+    if (!user) { res.json({ step: 'findByUsername', found: false }); return; }
+    // 比较 hash
+    const hashMatch = user.password_hash === hash;
+    // 再按 username + password_hash 查
+    const user2 = await qGet('SELECT id FROM users WHERE username = ? AND password_hash = ?', [username, hash]);
+    res.json({
+      step: 'compare',
+      foundByUser: true,
+      userId: user.id,
+      storedHash: user.password_hash,
+      computedHash: hash,
+      hashMatch: hashMatch,
+      foundByBoth: !!user2,
+    });
+  } catch(e) {
+    res.json({ error: e.message, stack: e.stack });
+  }
+});
+
 // SPA fallback
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
