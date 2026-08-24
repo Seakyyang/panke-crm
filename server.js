@@ -1378,6 +1378,19 @@ app.get('/api/diag/login', async (req, res) => {
   }
 });
 
+// 临时密码验证端点（仅供诊断，验证后删除）
+app.get('/api/diag/checkpw', async (req, res) => {
+  try {
+    const username = req.query.u || 'admin';
+    const pw = req.query.p || 'admin123';
+    const hash = hashPassword(pw);
+    const user = await qGet('SELECT id, username, role, status FROM users WHERE username = ? AND password_hash = ?', [username, hash]);
+    res.json({ username, passwordOk: !!user, found: !!user, role: user?.role, status: user?.status });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
 // SPA fallback
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
