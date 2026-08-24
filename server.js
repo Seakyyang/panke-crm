@@ -135,7 +135,17 @@ async function initSchema() {
     -- 登录 token 列：每个用户独立的随机 token，避免相同密码导致 token 冲突
     ALTER TABLE users ADD COLUMN IF NOT EXISTS token TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token) WHERE token IS NOT NULL;
+    -- 迁移配置表（记录一次性迁移是否已执行）
+    CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT);
   `);
+
+  // 一次性迁移：将所有 pending 状态的用户批量审批通过
+  const mig = await qGet("SELECT value FROM app_config WHERE key = 'approve_all_20260824'");
+  if (!mig) {
+    const r = await q("UPDATE users SET status = 'approved' WHERE status = 'pending'");
+    console.log(`[Migration] Auto-approved ${r.rowCount} pending users`);
+    await q("INSERT INTO app_config (key, value) VALUES ('approve_all_20260824', 'done') ON CONFLICT DO NOTHING");
+  }
 }
 
 // ==================== SEED DATA ====================
@@ -317,24 +327,15 @@ async function auth(req, res, next) {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ error: '未登录' });
-    // 按 token 反查用户（token 是登录时生成的随机值，不会冲突）
-    // 兼容老版本：如果用户还没有 token（旧账号），仍允许按 password_hash 查
+    // 按 token 反查用户（token 是登录时生成的随机值，每个用户唯一，不会冲突）
     const user = await qGet(`
       SELECT u.*, a.name as agent_name, s.name as store_name
       FROM users u
       LEFT JOIN agents a ON u.agent_id = a.id
       LEFT JOIN stores s ON u.store_id = s.id
-      WHERE (u.token = ? OR u.password_hash = ?) AND u.status = 'approved'
-      ORDER BY (u.token IS NOT NULL) DESC, u.id ASC
-      LIMIT 1
-    `, [token, token]);
-    if (!user) return res.status(401).json({ error: 'Token无效或账号未审核' });
-    // 老用户首次用旧 token 登录，立刻补上独立 token，避免下次冲突
-    if (!user.token) {
-      const newToken = genToken();
-      await q('UPDATE users SET token = ? WHERE id = ?', [newToken, user.id]);
-      user.token = newToken;
-    }
+      WHERE u.token = ? AND u.status = 'approved'
+    `, [token]);
+    if (!user) return res.status(401).json({ error: '登录已过期，请重新登录' });
     req.user = user;
     next();
   } catch (e) {
