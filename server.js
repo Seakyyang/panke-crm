@@ -1343,6 +1343,29 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
 
+// 临时诊断端点（不暴露敏感信息）
+app.get('/api/diag', async (req, res) => {
+  try {
+    const total = await qGet('SELECT COUNT(*)::int as c FROM users');
+    const approved = await qGet("SELECT COUNT(*)::int as c FROM users WHERE status = 'approved'");
+    const pending = await qGet("SELECT COUNT(*)::int as c FROM users WHERE status = 'pending'");
+    const adminExists = await qGet("SELECT id, status, (token IS NOT NULL) as has_token FROM users WHERE username = 'admin'");
+    const hasTokenCol = await qGet("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='token'");
+    res.json({
+      dbReady,
+      totalUsers: total.c,
+      approvedUsers: approved.c,
+      pendingUsers: pending.c,
+      adminExists: !!adminExists,
+      adminStatus: adminExists?.status,
+      adminHasToken: adminExists?.has_token,
+      tokenColumnExists: !!hasTokenCol,
+    });
+  } catch(e) {
+    res.json({ error: e.message, dbReady });
+  }
+});
+
 // SPA fallback
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
