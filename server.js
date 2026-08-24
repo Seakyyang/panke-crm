@@ -1366,6 +1366,18 @@ app.get('/api/diag', async (req, res) => {
   }
 });
 
+// 临时登录测试端点（用 GET + query param，仅供诊断，验证后删除）
+app.get('/api/diag/login', async (req, res) => {
+  try {
+    const username = req.query.u || 'admin';
+    const user = await qGet('SELECT id, username, role, status, (token IS NOT NULL) as has_token FROM users WHERE username = ?', [username]);
+    if (!user) { res.json({ found: false, username }); return; }
+    res.json({ found: true, id: user.id, username: user.username, role: user.role, status: user.status, hasToken: user.has_token });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
 // SPA fallback
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
