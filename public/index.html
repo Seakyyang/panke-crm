@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026-08-24.8">
+<meta name="app-version" content="2026-08-24.9">
 <title>华南C3营销协同平台·盘客云销</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <style>
@@ -142,6 +142,7 @@ tr:hover { background: #fafafa; }
 .btn-sm:hover { border-color: var(--primary); color: var(--primary); }
 .btn-sm.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .btn-sm.danger { color: var(--danger); }
+.btn-sm.warning { color: var(--warning); }
 
 /* Modal */
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 200; align-items: center; justify-content: center; }
@@ -453,7 +454,13 @@ tr:hover { background: #fafafa; }
     <div style="margin-bottom:12px;padding:8px 12px;background:#f6f8fa;border-radius:4px;font-size:13px;color:var(--text-secondary)">
       新注册用户需管理员审核通过后才能登录。点击"通过"即可放行，点击"拒绝"则该用户无法登录。
     </div>
-    <div id="userApprovalList" style="max-height:500px;overflow-y:auto"></div>
+    <div id="userApprovalList" style="max-height:260px;overflow-y:auto"></div>
+    <h2 style="margin-top:20px">所有用户</h2>
+    <div style="margin-bottom:8px">
+      <input id="userSearchInput" type="text" placeholder="搜索用户名 / 姓名 / 门店..." oninput="renderAllUsers()"
+        style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+    </div>
+    <div id="userManageList" style="max-height:340px;overflow-y:auto"></div>
     <div class="modal-actions">
       <button class="btn btn-default" onclick="closeModal('userApprovalModal')">关闭</button>
     </div>
@@ -579,6 +586,70 @@ function logout() {
 function openUserApprovalModal() {
   document.getElementById('userApprovalModal').classList.add('show');
   loadPendingUsers();
+  loadAllUsers();
+}
+
+// ============ ALL USERS MANAGEMENT (admin) ============
+let allUsersCache = [];
+
+function loadAllUsers() {
+  fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+    .then(r => r.json()).then(d => {
+      if (d.error) { alert(d.error); return; }
+      allUsersCache = d.users || [];
+      renderAllUsers();
+    }).catch(e => alert('加载用户列表失败：' + e));
+}
+
+function renderAllUsers() {
+  const list = document.getElementById('userManageList');
+  if (!list) return;
+  const kw = (document.getElementById('userSearchInput')?.value || '').trim().toLowerCase();
+  const users = kw ? allUsersCache.filter(u =>
+    (u.username || '').toLowerCase().includes(kw) ||
+    (u.agent_name || '').toLowerCase().includes(kw) ||
+    (u.store_name || '').toLowerCase().includes(kw)
+  ) : allUsersCache;
+  if (users.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-secondary)">没有匹配的用户</div>';
+    return;
+  }
+  const roleMap = { admin: '管理员', manager: '门店经理', agent: '员工' };
+  const statusMap = {
+    pending: '<span style="color:var(--warning);">待审核</span>',
+    rejected: '<span style="color:var(--danger);">已拒绝</span>',
+    approved: '<span style="color:var(--success);">正常</span>',
+    disabled: '<span style="color:var(--text-secondary);">已禁用</span>',
+  };
+  list.innerHTML = users.map(u => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:#fff">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:14px">${u.username} <span style="font-size:12px;color:var(--text-secondary);font-weight:normal">(${roleMap[u.role] || u.role})</span></div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">
+          ${u.agent_name ? '姓名：' + u.agent_name + ' · ' : ''}${u.store_name ? u.store_name : '未指定门店'}
+          · ${statusMap[u.status] || u.status}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${u.role !== 'admin' && u.status === 'approved' ? `<button class="btn-sm warning" onclick="resetUserPassword(${u.id}, '${(u.username || '').replace(/'/g, "\\'")}')">重置密码</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function resetUserPassword(userId, username) {
+  const newPass = prompt(`请输入「${username}」的新密码（至少 6 位）：`);
+  if (newPass === null) return;
+  if (newPass.trim().length < 6) { alert('密码至少 6 位'); return; }
+  if (!confirm(`确定将「${username}」的密码重置吗？该用户已登录的会话将被强制退出。`)) return;
+  fetch('/api/admin/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ user_id: userId, new_password: newPass.trim() })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    alert(`已重置「${username}」的密码为：${newPass.trim()}\n请尽快告知该用户`);
+  }).catch(e => alert('重置失败：' + e));
 }
 
 function loadPendingUsers() {
